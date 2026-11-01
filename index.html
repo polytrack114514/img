@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>图床 · 粘贴即上传</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161a22;
+    --surface-2: #1d222c;
+    --border: #2a303c;
+    --border-strong: #3a4152;
+    --text: #e8eaef;
+    --muted: #8b93a3;
+    --accent: #4f8cff;
+    --accent-soft: rgba(79, 140, 255, 0.12);
+    --ok: #35c07a;
+    --err: #f0626b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body {
+    background: radial-gradient(1200px 600px at 15% -10%, #1a2438 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    font-size: 14px; line-height: 1.6; min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 11px; flex: none;
+    background: linear-gradient(140deg, #4f8cff, #7b5cff);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 22px -8px rgba(79, 140, 255, 0.7);
+  }
+  .logo svg { width: 20px; height: 20px; fill: #fff; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+
+  .repo-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 7px 14px 7px 11px;
+    color: var(--text); text-decoration: none; font-size: 13px;
+    transition: border-color .18s, transform .18s;
+  }
+  .repo-chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(53, 192, 122, .15); }
+  .dot.off { background: var(--err); box-shadow: 0 0 0 3px rgba(240, 98, 107, .15); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-title { font-size: 14px; font-weight: 620; display: flex; align-items: center; gap: 8px; }
+  .stat { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .banner {
+    display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;
+    background: rgba(232, 163, 61, .07); border: 1px solid rgba(232, 163, 61, .28);
+    border-radius: 12px; padding: 13px 15px; margin-bottom: 18px; font-size: 13px;
+    color: #e9c184;
+  }
+
+  input[type="password"] {
+    width: 130px; background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 11px; font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color .16s, box-shadow .16s;
+  }
+  input[type="password"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder { color: #5c6474; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+    padding: 8px 15px; border-radius: 10px; font-size: 13px; font-family: inherit;
+    cursor: pointer; transition: background .16s, border-color .16s, transform .1s; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); background: #202634; }
+  .btn:active { transform: scale(.975); }
+  .btn.ghost { background: transparent; border-color: var(--border); }
+  .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.danger { color: var(--err); border-color: rgba(240, 98, 107, .35); }
+  .btn.danger:hover { background: rgba(240, 98, 107, .1); border-color: var(--err); }
+
+  .drop {
+    border: 1.5px dashed var(--border-strong); border-radius: 12px;
+    padding: 30px 20px; text-align: center; cursor: pointer;
+    transition: border-color .18s, background .18s; background: rgba(255, 255, 255, .012);
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); border-style: solid; }
+  .drop.off { opacity: .45; cursor: not-allowed; }
+  .drop svg { width: 34px; height: 34px; stroke: var(--muted); margin-bottom: 8px; }
+  .drop.over svg { stroke: var(--accent); }
+  .drop-main { font-size: 14px; font-weight: 600; }
+  .drop-sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+
+  .hint {
+    font-size: 12.5px; color: var(--muted); margin-top: 12px;
+    background: rgba(255,255,255,.02); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .hint code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+
+  .queue { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .item {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 12px; animation: fade .22s ease;
+  }
+  @keyframes fade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .item .fname { font-weight: 550; font-size: 13px; word-break: break-all; }
+  .item .fmeta { color: var(--muted); font-size: 11.5px; }
+  .grow { flex: 1; min-width: 0; }
+  .badge {
+    font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--border); color: var(--muted); flex: none;
+  }
+  .badge.ok { color: var(--ok); border-color: rgba(53,192,122,.35); background: rgba(53,192,122,.1); }
+  .badge.err { color: var(--err); border-color: rgba(240,98,107,.35); background: rgba(240,98,107,.1); }
+  .badge.run { color: var(--accent); border-color: rgba(79,140,255,.4); background: var(--accent-soft); }
+  .bar { height: 3px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f8cff, #7b5cff); transition: width .2s; }
+
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px; }
+  .tile {
+    position: relative; border-radius: 11px; overflow: hidden;
+    border: 1px solid var(--border); background: var(--surface-2);
+    display: flex; flex-direction: column; transition: border-color .16s, transform .16s;
+  }
+  .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .thumb { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; cursor: zoom-in; background: #0f1218; }
+  .tinfo { padding: 7px 9px 8px; }
+  .tname { font-size: 12px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tmeta { font-size: 11px; color: var(--muted); }
+  .tacts { display: flex; gap: 4px; padding: 0 9px 9px; flex-wrap: wrap; }
+  .tacts .btn { padding: 3px 7px; font-size: 11px; border-radius: 6px; }
+
+  .tlist { display: flex; flex-direction: column; gap: 8px; }
+  .trow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; }
+  .trow img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; background: #0f1218; flex: none; }
+
+  .empty { text-align: center; padding: 40px 10px; color: var(--muted); font-size: 13px; }
+  .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--accent); animation: sp .7s linear infinite; display: inline-block; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
+    background: #202634; border: 1px solid var(--border-strong); color: var(--text);
+    padding: 10px 18px; border-radius: 10px; font-size: 13px;
+    box-shadow: 0 16px 40px -12px rgba(0,0,0,.8); opacity: 0; pointer-events: none;
+    transition: opacity .22s, transform .22s; z-index: 60; max-width: 88vw;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: rgba(240,98,107,.5); }
+  .toast.ok { border-color: rgba(53,192,122,.5); }
+
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(6, 8, 12, .88);
+    display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50;
+    backdrop-filter: blur(6px);
+  }
+  .lb-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; max-width: 900px; width: 100%; max-height: 92vh; overflow: auto; }
+  .lb-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .lb-name { font-weight: 600; font-size: 13px; word-break: break-all; flex: 1; min-width: 0; }
+  .lb-body { padding: 12px; text-align: center; background: #0f1218; }
+  .lb-body img { max-width: 100%; max-height: 62vh; border-radius: 8px; }
+  .lb-foot { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+  .lb-meta { color: var(--muted); font-size: 12px; margin-right: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>
+      </div>
+      <div>
+        <h1>图床</h1>
+        <div class="sub">粘贴即上传 · 直链 / Markdown / HTML 一键复制</div>
+      </div>
+    </div>
+    <a class="repo-chip" id="repoLink" href="#" target="_blank" rel="noopener">
+      <span class="dot" id="statusDot"></span>
+      <span id="repoLabel">polytrack114514/img</span>
+    </a>
+  </header>
+
+  <div class="banner" id="banner" hidden>
+    <span>⚠️</span>
+    <span>没有读到后端地址（<code>backend.json</code> 里的 <code>workerUrl</code>），上传和删除暂时不可用。</span>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <div class="card-title">上传图片</div>
+      <div class="row">
+        <input type="password" id="fPass" placeholder="口令" autocomplete="off" />
+        <button class="btn sm ghost" id="btnReload">重连</button>
+      </div>
+    </div>
+
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div class="drop-main" id="dropMain">拖拽图片到这里，或点击选择</div>
+      <div class="drop-sub">也可以直接 <b>Ctrl + V</b> 粘贴截图 · 支持多张 · 单张 ≤ 20 MB</div>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*" multiple hidden />
+
+    <div class="queue" id="queue"></div>
+
+    <div class="hint">
+      图片会提交到仓库 <code>polytrack114514/img</code>，直链为 <code>https://polytrack114514.github.io/img/文件名</code>。
+      上传和删除需要口令，浏览和复制链接不需要。
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div class="card-title">图库<span class="stat" id="statLine"></span></div>
+      <div class="row">
+        <button class="btn sm ghost" id="btnTrash">回收站</button>
+        <button class="btn sm ghost" id="btnRefresh">刷新</button>
+      </div>
+    </div>
+    <div class="gallery" id="gallery">
+      <div class="empty">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="card" id="trashCard" hidden>
+    <div class="card-head">
+      <div class="card-title">回收站<span class="stat" id="trashStat"></span></div>
+      <div class="row">
+        <button class="btn sm danger" id="btnTrashEmpty">清空回收站</button>
+        <button class="btn sm ghost" id="btnTrashClose">收起</button>
+      </div>
+    </div>
+    <div class="tlist" id="trashList">
+      <div class="empty">正在加载…</div>
+    </div>
+    <div class="hint">删除的图片会先移到仓库的 <code>.trash</code> 目录，可以点「恢复」放回；只有「彻底删除」才会真正移除。</div>
+  </section>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-box">
+    <div class="lb-head">
+      <span class="lb-name" id="lbName"></span>
+      <button class="btn sm ghost" id="lbClose">关闭</button>
+    </div>
+    <div class="lb-body"><img id="lbImg" alt="" /></div>
+    <div class="lb-foot">
+      <span class="lb-meta" id="lbMeta"></span>
+      <a class="btn sm" id="lbOpen" href="#" target="_blank" rel="noopener">新标签打开</a>
+      <a class="btn sm" id="lbDownload" href="#">下载原图</a>
+      <button class="btn sm" id="lbCopyUrl">复制直链</button>
+      <button class="btn sm" id="lbCopyMd">Markdown</button>
+      <button class="btn sm" id="lbCopyHtml">HTML</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ====== 仓库参数 ======
+  const CFG = {
+    owner: 'polytrack114514',
+    repo: 'img',
+    branch: 'main',
+  };
+  // ======================
+
+  const MAX_FILE = 20 * 1024 * 1024;
+  const PASS_KEY = 'img_pass';
+  const $ = (id) => document.getElementById(id);
+
+  let backend = { workerUrl: '', password: '' };
+  let ready = false;
+  let images = [];
+  let lightboxName = '';
+  const queue = [];
+  let running = false;
+
+  // ---------- 小工具 ----------
+  function toast(msg, kind) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = 'toast' + (kind ? ' ' + kind : ''); }, 3200);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function fmtSize(n) {
+    if (n === undefined || n === null) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const p = (n) => (n < 10 ? '0' + n : '' + n);
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+      ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function siteBase() {
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+      return location.origin + location.pathname.replace(/[^\/]*$/, '');
+    }
+    return 'https://polytrack114514.github.io/img/';
+  }
+
+  function imgUrl(name) {
+    return siteBase() + encodeURIComponent(name);
+  }
+
+  function workerBase() {
+    return backend.workerUrl.replace(/\/+$/, '');
+  }
+
+  function storedPass() {
+    try { return localStorage.getItem(PASS_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function getPass() {
+    const v = String($('fPass').value || '').trim();
+    if (!v) {
+      toast('请先输入上传/删除口令', 'err');
+      $('fPass').focus();
+      return null;
+    }
+    return v;
+  }
+
+  // ---------- 复制 ----------
+  function copyText(text) {
+    return new Promise((resolve) => {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+          .then(() => resolve(true))
+          .catch(() => resolve(fallbackCopy(text)));
+        return;
+      }
+      resolve(fallbackCopy(text));
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function copy(kind, name) {
+    const url = imgUrl(name);
+    const text = kind === 'md' ? '![' + name + '](' + url + ')'
+      : kind === 'html' ? '<img src="' + url + '" alt="' + name + '">'
+      : url;
+    const ok = await copyText(text);
+    if (ok) toast(kind === 'md' ? '已复制 Markdown' : kind === 'html' ? '已复制 HTML' : '已复制直链', 'ok');
+    else toast('复制失败，请手动复制：' + url, 'err');
+  }
+
+  // ---------- 后端配置 ----------
+  async function loadBackendConfig() {
+    let cfg = null;
+    try {
+      const res = await fetch('backend.json?t=' + Date.now(), { cache: 'no-store' });
+      if (res.ok) cfg = await res.json();
+    } catch (e) { /* 本地直开或文件缺失 */ }
+
+    backend.workerUrl = (cfg && String(cfg.workerUrl || '').trim()) || '';
+    backend.password = (cfg && cfg.password) || '';
+    ready = !!backend.workerUrl;
+
+    $('banner').hidden = ready;
+    $('statusDot').className = 'dot ' + (ready ? 'on' : 'off');
+    $('drop').classList.toggle('off', !ready);
+    $('dropMain').textContent = ready ? '拖拽图片到这里，或点击选择' : '后端未配置，暂时无法上传';
+    return ready;
+  }
+
+  // ---------- 请求 ----------
+  function postJSON(url, body, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      }
+      xhr.onload = () => {
+        let data = null;
+        try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (e) {}
+        if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+        const msg = (data && (data.error || data.message)) || ('HTTP ' + xhr.status);
+        const err = new Error(msg);
+        err.status = xhr.status;
+        reject(err);
+      };
+      xhr.onerror = () => reject(new Error('网络错误：无法连接后端'));
+      xhr.ontimeout = () => reject(new Error('请求超时'));
+      xhr.send(JSON.stringify(body));
+    });
+  }
+
+  async function getJSON(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+
+  // ---------- 图库 ----------
+  async function loadImages() {
+    $('gallery').innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+    if (!ready) {
+      $('gallery').innerHTML = '<div class="empty">后端未配置，暂时无法读取图库</div>';
+      return;
+    }
+    try {
+      const list = await getJSON(workerBase() + '/list');
+      images = Array.isArray(list) ? list : [];
+      renderGallery();
+    } catch (e) {
+      $('gallery').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+    }
+  }
+
+  function renderGallery() {
+    if (!images.length) {
+      $('gallery').innerHTML = '<div class="empty" style="grid-column:1/-1">还没有图片，粘贴或拖拽一张试试</div>';
+      $('statLine').textContent = '';
+      return;
+    }
+    const bytes = images.reduce((s, it) => s + (it.size || 0), 0);
+    $('statLine').textContent = '共 ' + images.length + ' 张 · ' + fmtSize(bytes);
+
+    $('gallery').innerHTML = images.map((it) => {
+      const u = imgUrl(it.name);
+      return '<div class="tile">' +
+        '<img class="thumb" src="' + esc(u) + '" alt="' + esc(it.name) + '" loading="lazy" data-lb="' + esc(it.name) + '" />' +
+        '<div class="tinfo">' +
+          '<div class="tname" title="' + esc(it.name) + '">' + esc(it.name) + '</div>' +
+          '<div class="tmeta">' + fmtSize(it.size) + (it.uploadedAt ? ' · ' + fmtTime(it.uploadedAt) : '') + '</div>' +
+        '</div>' +
+        '<div class="tacts">' +
+          '<button class="btn" data-copy="url" data-name="' + esc(it.name) + '">直链</button>' +
+          '<button class="btn" data-copy="md" data-name="' + esc(it.name) + '">MD</button>' +
+          '<button class="btn" data-copy="html" data-name="' + esc(it.name) + '">HTML</button>' +
+          '<button class="btn danger" data-del="' + esc(it.name) + '" data-sha="' + (it.sha || '') + '">删除</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    $('gallery').querySelectorAll('[data-lb]').forEach((el) => {
+      el.addEventListener('click', () => openLightbox(el.dataset.lb));
+    });
+    $('gallery').querySelectorAll('[data-copy]').forEach((el) => {
+      el.addEventListener('click', () => copy(el.dataset.copy, el.dataset.name));
+    });
+    $('gallery').querySelectorAll('[data-del]').forEach((el) => {
+      el.addEventListener('click', () => deleteImage(el.dataset.del, el.dataset.sha));
+    });
+  }
+
+  async function loadStats() {
+    if (!ready) return;
+    try {
+      const s = await getJSON(workerBase() + '/stats');
+      $('statLine').textContent = '共 ' + (s.images || 0) + ' 张 · ' + fmtSize(s.bytes || 0);
+    } catch (e) { /* 统计失败不影响主流程 */ }
+  }
+
+  // ---------- 大图 ----------
+  function openLightbox(name) {
+    const it = images.find((x) => x.name === name);
+    lightboxName = name;
+    $('lbName').textContent = name;
+    $('lbImg').src = imgUrl(name);
+    $('lbImg').alt = name;
+    $('lbMeta').textContent = it ? fmtSize(it.size) + (it.uploadedAt ? ' · 上传于 ' + fmtTime(it.uploadedAt) : '') : '';
+    $('lbOpen').href = imgUrl(name);
+    $('lbDownload').href = workerBase() + '/download?name=' + encodeURIComponent(name);
+    $('lightbox').hidden = false;
+  }
+
+  function closeLightbox() {
+    $('lightbox').hidden = true;
+    $('lbImg').src = '';
+    lightboxName = '';
+  }
+
+  // ---------- 上传 ----------
+  function sanitizeBase(name) {
+    const base = String(name || '').replace(/\.[^.]+$/, '')
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/[^\w\u4e00-\u9fa5.-]/g, '')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return base;
+  }
+
+  function extOf(file) {
+    const m = String(file.name || '').match(/\.([a-z0-9]+)$/i);
+    if (m) return m[1].toLowerCase();
+    const t = String(file.type || '');
+    if (t.indexOf('png') >= 0) return 'png';
+    if (t.indexOf('jpeg') >= 0) return 'jpg';
+    if (t.indexOf('gif') >= 0) return 'gif';
+    if (t.indexOf('webp') >= 0) return 'webp';
+    if (t.indexOf('svg') >= 0) return 'svg';
+    return 'png';
+  }
+
+  function makeName(file) {
+    const d = new Date();
+    const p = (n) => (n < 10 ? '0' + n : '' + n);
+    const stamp = '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    let base = sanitizeBase(file.name);
+    if (!base || ['image', 'blob', 'clipboard', 'unknown', 'screenshot'].indexOf(base.toLowerCase()) >= 0) {
+      base = 'img-' + stamp;
+    }
+    const rnd = Math.random().toString(36).slice(2, 6);
+    return base + '-' + rnd + '.' + extOf(file);
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = String(r.result);
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      r.onerror = () => reject(r.error || new Error('读取文件失败'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  function addFiles(fileList) {
+    if (!ready) { toast('后端未配置，暂时无法上传', 'err'); return; }
+    if (!getPass()) return;
+    let added = 0;
+    for (const file of Array.from(fileList)) {
+      if (!/^image\//.test(file.type) && !/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(file.name || '')) {
+        toast('「' + (file.name || '剪贴板内容') + '」不是图片，已跳过', 'err');
+        continue;
+      }
+      if (file.size > MAX_FILE) {
+        toast('「' + (file.name || '图片') + '」超过 20 MB，已跳过', 'err');
+        continue;
+      }
+      queue.push({ file, name: makeName(file), size: file.size, status: 'wait', progress: 0, error: '' });
+      added++;
+    }
+    renderQueue();
+    if (added) runQueue();
+  }
+
+  function renderQueue() {
+    const box = $('queue');
+    if (!queue.length) { box.innerHTML = ''; return; }
+    box.innerHTML = queue.map((it) => {
+      const cls = it.status === 'ok' ? 'ok' : it.status === 'err' ? 'err' : it.status === 'run' ? 'run' : '';
+      const label = it.status === 'ok' ? '完成' : it.status === 'err' ? '失败' : it.status === 'run' ? '上传中' : '等待';
+      return '<div class="item">' +
+        '<span class="' + (it.status === 'run' ? 'spin' : '') + '"></span>' +
+        '<div class="grow">' +
+          '<div class="fname">' + esc(it.name) + '</div>' +
+          '<div class="fmeta">' + fmtSize(it.size) +
+            (it.error ? ' · <span style="color:var(--err)">' + esc(it.error) + '</span>' : '') + '</div>' +
+          (it.status === 'run' ? '<div class="bar"><i style="width:' + (it.progress * 100).toFixed(0) + '%"></i></div>' : '') +
+        '</div>' +
+        '<span class="badge ' + cls + '">' + label + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  async function runQueue() {
+    if (running) return;
+    running = true;
+    try {
+      while (true) {
+        const next = queue.find((it) => it.status === 'wait');
+        if (!next) break;
+        await uploadOne(next);
+      }
+    } finally {
+      running = false;
+    }
+    const okCount = queue.filter((i) => i.status === 'ok').length;
+    if (okCount) {
+      toast('已上传 ' + okCount + ' 张图片', 'ok');
+      loadImages();
+      loadStats();
+    }
+  }
+
+  async function uploadOne(item) {
+    const pass = getPass();
+    if (!pass) {
+      item.status = 'err';
+      item.error = '缺少口令';
+      renderQueue();
+      return;
+    }
+    item.status = 'run';
+    item.progress = 0;
+    renderQueue();
+    try {
+      const b64 = await fileToBase64(item.file);
+      await postJSON(workerBase() + '/upload', {
+        name: item.name,
+        content: b64,
+        password: pass,
+      }, (p) => {
+        item.progress = p;
+        renderQueue();
+      });
+      item.status = 'ok';
+      item.progress = 1;
+      item.error = '';
+      renderQueue();
+    } catch (e) {
+      item.status = 'err';
+      item.error = e.message;
+      renderQueue();
+    }
+  }
+
+  // ---------- 删除 ----------
+  async function deleteImage(name, sha) {
+    if (!ready) { toast('后端未配置，无法删除', 'err'); return; }
+    const pass = getPass();
+    if (!pass) return;
+    if (!confirm('删除「' + name + '」？图片会移入回收站，可以再恢复。')) return;
+    try {
+      await postJSON(workerBase() + '/delete', { name, sha: sha || '', password: pass });
+      toast('已移入回收站：' + name, 'ok');
+      if (lightboxName === name) closeLightbox();
+      loadImages();
+      loadStats();
+      if (!$('trashCard').hidden) loadTrash();
+    } catch (e) {
+      toast('删除失败：' + e.message, 'err');
+    }
+  }
+
+  // ---------- 回收站 ----------
+  async function loadTrash() {
+    $('trashCard').hidden = false;
+    if (!ready) {
+      $('trashList').innerHTML = '<div class="empty">后端未配置，无法读取回收站</div>';
+      return;
+    }
+    $('trashList').innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+    try {
+      const items = await getJSON(workerBase() + '/trash');
+      if (!Array.isArray(items) || !items.length) {
+        $('trashStat').textContent = '';
+        $('trashList').innerHTML = '<div class="empty">回收站是空的</div>';
+        return;
+      }
+      const bytes = items.reduce((s, it) => s + (it.size || 0), 0);
+      $('trashStat').textContent = '共 ' + items.length + ' 张 · ' + fmtSize(bytes);
+      $('trashList').innerHTML = items.map((it) =>
+        '<div class="trow">' +
+          '<div class="grow">' +
+            '<div class="fname">' + esc(it.name) + '</div>' +
+            '<div class="fmeta">' + fmtSize(it.size) +
+              (it.deletedAt ? ' · 删除于 ' + fmtTime(it.deletedAt) : '') + '</div>' +
+          '</div>' +
+          '<div class="row">' +
+            '<button class="btn sm" data-restore="' + esc(it.name) + '">恢复</button>' +
+            '<button class="btn sm danger" data-purge="' + esc(it.name) + '">彻底删除</button>' +
+          '</div>' +
+        '</div>').join('');
+
+      $('trashList').querySelectorAll('[data-restore]').forEach((el) => {
+        el.addEventListener('click', () => trashAction('restore', el.dataset.restore));
+      });
+      $('trashList').querySelectorAll('[data-purge]').forEach((el) => {
+        el.addEventListener('click', () => trashAction('purge', el.dataset.purge));
+      });
+    } catch (e) {
+      $('trashStat').textContent = '';
+      $('trashList').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function trashAction(action, name) {
+    const pass = getPass();
+    if (!pass) return;
+    if (action === 'purge' && !confirm('彻底删除「' + name + '」？删除后无法恢复。')) return;
+    try {
+      await postJSON(workerBase() + '/trash', { action, name, password: pass });
+      toast(action === 'restore' ? '已恢复「' + name + '」' : '已彻底删除「' + name + '」', 'ok');
+      loadTrash();
+      loadImages();
+      loadStats();
+    } catch (e) {
+      toast((action === 'restore' ? '恢复' : '删除') + '失败：' + e.message, 'err');
+    }
+  }
+
+  async function emptyTrash() {
+    const pass = getPass();
+    if (!pass) return;
+    if (!confirm('清空回收站？其中所有图片都会被彻底删除，无法恢复。')) return;
+    try {
+      const r = await postJSON(workerBase() + '/trash', { action: 'empty', password: pass });
+      toast('已清空回收站（' + ((r && r.removed) || 0) + ' 张）', 'ok');
+      loadTrash();
+      loadStats();
+    } catch (e) {
+      toast('清空失败：' + e.message, 'err');
+    }
+  }
+
+  // ---------- 事件 ----------
+  function bind() {
+    $('btnReload').addEventListener('click', async () => {
+      const ok = await loadBackendConfig();
+      toast(ok ? '后端已就绪' : '仍未读到 backend.json 里的 workerUrl', ok ? 'ok' : 'err');
+      if (ok) { loadImages(); loadStats(); }
+    });
+
+    const drop = $('drop');
+    drop.addEventListener('click', () => ready && $('fileInput').click());
+    $('fileInput').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+
+    ['dragenter', 'dragover'].forEach((ev) => {
+      drop.addEventListener(ev, (e) => { e.preventDefault(); if (ready) drop.classList.add('over'); });
+    });
+    ['dragleave', 'drop'].forEach((ev) => {
+      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', (e) => {
+      if (!ready) { toast('后端未配置，暂时无法上传', 'err'); return; }
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) addFiles(files);
+    });
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => e.preventDefault());
+
+    // 粘贴截图
+    document.addEventListener('paste', (e) => {
+      const dt = e.clipboardData;
+      if (!dt) return;
+      const files = [];
+      for (const item of Array.from(dt.items || [])) {
+        if (item.kind === 'file' && /^image\//.test(item.type)) {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (!files.length) return;
+      e.preventDefault();
+      addFiles(files);
+    });
+
+    $('btnRefresh').addEventListener('click', () => { loadImages(); loadStats(); });
+    $('btnTrash').addEventListener('click', () => {
+      if (!$('trashCard').hidden) { $('trashCard').hidden = true; return; }
+      loadTrash();
+    });
+    $('btnTrashClose').addEventListener('click', () => { $('trashCard').hidden = true; });
+    $('btnTrashEmpty').addEventListener('click', emptyTrash);
+
+    $('fPass').addEventListener('input', (e) => {
+      try { localStorage.setItem(PASS_KEY, e.target.value); } catch (err) {}
+    });
+
+    $('lbClose').addEventListener('click', closeLightbox);
+    $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) closeLightbox(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('lightbox').hidden) closeLightbox();
+    });
+    $('lbCopyUrl').addEventListener('click', () => lightboxName && copy('url', lightboxName));
+    $('lbCopyMd').addEventListener('click', () => lightboxName && copy('md', lightboxName));
+    $('lbCopyHtml').addEventListener('click', () => lightboxName && copy('html', lightboxName));
+  }
+
+  // ---------- 启动 ----------
+  async function init() {
+    $('repoLink').href = 'https://github.com/' + CFG.owner + '/' + CFG.repo;
+    $('repoLabel').textContent = CFG.owner + '/' + CFG.repo;
+    bind();
+    await loadBackendConfig();
+    $('fPass').value = storedPass() || backend.password || '';
+    loadImages();
+    loadStats();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
