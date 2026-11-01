@@ -648,7 +648,7 @@
     renderQueue();
     try {
       const b64 = await fileToBase64(item.file);
-      await postJSON(workerBase() + '/upload', {
+      const r = await postJSON(workerBase() + '/upload', {
         name: item.name,
         content: b64,
         password: pass,
@@ -659,6 +659,8 @@
       item.status = 'ok';
       item.progress = 1;
       item.error = '';
+      // 重名时后端会自动改名，这里显示真正保存的名字
+      if (r && r.name) item.name = r.name;
       renderQueue();
     } catch (e) {
       item.status = 'err';
