@@ -207,7 +207,8 @@
     <div class="card-head">
       <div class="card-title">上传图片</div>
       <div class="row">
-        <input type="password" id="fPass" placeholder="口令" autocomplete="off" />
+        <input type="password" id="fPass" placeholder="口令或令牌" autocomplete="off" />
+        <button class="btn sm ghost" id="btnTokens">令牌</button>
         <button class="btn sm ghost" id="btnReload">重连</button>
       </div>
     </div>
@@ -226,7 +227,7 @@
 
     <div class="hint">
       图片会提交到仓库 <code>polytrack114514/img</code>，直链为 <code>https://polytrack114514.github.io/img/文件名</code>。
-      上传和删除需要口令，浏览和复制链接不需要。
+      上传和删除需要口令或访问令牌，浏览和复制链接不需要。
     </div>
   </section>
 
@@ -240,6 +241,23 @@
     </div>
     <div class="gallery" id="gallery">
       <div class="empty">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="card" id="tokenCard" hidden>
+    <div class="card-head">
+      <div class="card-title">访问令牌<span class="stat" id="tokenStat"></span></div>
+      <div class="row">
+        <button class="btn sm" id="btnTokenNew">生成新令牌</button>
+        <button class="btn sm ghost" id="btnTokenClose">收起</button>
+      </div>
+    </div>
+    <div class="tlist" id="tokenList">
+      <div class="empty">正在加载…</div>
+    </div>
+    <div class="hint">
+      令牌和主口令一样能上传、删除图片，但可以单独吊销——某台设备不用了就吊销它，不影响别的设备。
+      令牌只在有主口令时才能查看和生成，请勿把它直接发到公开的地方。
     </div>
   </section>
 
@@ -297,6 +315,7 @@
   let backend = { workerUrl: '', password: '' };
   let ready = false;
   let images = [];
+  let tokens = [];
   let lightboxName = '';
   const queue = [];
   let running = false;
@@ -758,6 +777,90 @@
     }
   }
 
+  // ---------- 访问令牌 ----------
+  function renderTokens() {
+    if (!tokens.length) {
+      $('tokenStat').textContent = '';
+      $('tokenList').innerHTML = '<div class="empty">还没有令牌</div>';
+      return;
+    }
+    $('tokenStat').textContent = '共 ' + tokens.length + ' 个';
+    $('tokenList').innerHTML = tokens.map((it) =>
+      '<div class="trow">' +
+        '<div class="grow">' +
+          '<div class="fname">' + esc(it.name || '未命名令牌') + '</div>' +
+          '<div class="fmeta">' + esc(it.token) +
+            (it.createdAt ? ' · ' + fmtTime(it.createdAt) : '') + '</div>' +
+        '</div>' +
+        '<div class="row">' +
+          '<button class="btn sm" data-copy="' + esc(it.token) + '">复制</button>' +
+          '<button class="btn sm danger" data-revoke="' + esc(it.token) + '">吊销</button>' +
+        '</div>' +
+      '</div>').join('');
+
+    $('tokenList').querySelectorAll('[data-copy]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const ok = await copyText(el.dataset.copy);
+        toast(ok ? '已复制令牌' : '复制失败，请手动选中复制', ok ? 'ok' : 'err');
+      });
+    });
+    $('tokenList').querySelectorAll('[data-revoke]').forEach((el) => {
+      el.addEventListener('click', () => revokeToken(el.dataset.revoke));
+    });
+  }
+
+  async function loadTokens() {
+    if (!ready) {
+      $('tokenList').innerHTML = '<div class="empty">后端未配置，无法读取令牌</div>';
+      return;
+    }
+    const pass = getPass();
+    if (!pass) return;
+    $('tokenList').innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+    try {
+      const items = await postJSON(workerBase() + '/tokens', { action: 'list', password: pass });
+      // KV 列表写入有几秒延迟，保留本地刚生成、还没同步到列表里的令牌
+      const local = tokens.filter((t) => !(Array.isArray(items) && items.some((it) => it.token === t.token)));
+      tokens = (Array.isArray(items) ? items : []).concat(local);
+      renderTokens();
+    } catch (e) {
+      $('tokenStat').textContent = '';
+      $('tokenList').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function newToken() {
+    const pass = getPass();
+    if (!pass) return;
+    const label = prompt('给这个令牌起个名字（例如：手机、公司电脑）', '');
+    if (label === null) return;
+    try {
+      const r = await postJSON(workerBase() + '/tokens', { action: 'create', name: label, password: pass });
+      if (r && r.token) tokens.unshift({ token: r.token, name: r.name || '', createdAt: r.createdAt || null });
+      renderTokens();
+      const copied = r && r.token ? await copyText(r.token) : false;
+      toast(r && r.token
+        ? (copied ? '已生成并复制：' + r.token : '已生成：' + r.token + '（请手动复制）')
+        : '已生成令牌', 'ok');
+    } catch (e) {
+      toast('生成失败：' + e.message, 'err');
+    }
+  }
+
+  async function revokeToken(token) {
+    if (!confirm('吊销令牌？正在使用它的设备会马上无法上传，且无法恢复。')) return;
+    const pass = getPass();
+    if (!pass) return;
+    try {
+      await postJSON(workerBase() + '/tokens', { action: 'revoke', token, password: pass });
+      tokens = tokens.filter((t) => t.token !== token);
+      renderTokens();
+      toast('已吊销令牌', 'ok');
+    } catch (e) {
+      toast('吊销失败：' + e.message, 'err');
+    }
+  }
+
   // ---------- 事件 ----------
   function bind() {
     $('btnReload').addEventListener('click', async () => {
@@ -807,6 +910,14 @@
     });
     $('btnTrashClose').addEventListener('click', () => { $('trashCard').hidden = true; });
     $('btnTrashEmpty').addEventListener('click', emptyTrash);
+
+    $('btnTokens').addEventListener('click', () => {
+      if (!$('tokenCard').hidden) { $('tokenCard').hidden = true; return; }
+      $('tokenCard').hidden = false;
+      loadTokens();
+    });
+    $('btnTokenClose').addEventListener('click', () => { $('tokenCard').hidden = true; });
+    $('btnTokenNew').addEventListener('click', newToken);
 
     $('fPass').addEventListener('input', (e) => {
       try { localStorage.setItem(PASS_KEY, e.target.value); } catch (err) {}
