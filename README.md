@@ -1,0 +1,105 @@
+# img
+
+图床 —— 打开网页粘贴或拖拽图片，立刻拿到直链，**无需注册、无需令牌**。
+
+## 在线地址
+
+**https://polytrack114514.github.io/img/**
+
+## 怎么用
+
+1. 打开上面的网址
+2. 三种上传方式任选：
+   - 直接 **Ctrl + V 粘贴** 剪贴板里的图片（截图后不用存盘）
+   - 把图片 **拖进** 虚线区域
+   - 点虚线区域 **选择图片**（支持多选）
+3. 图片会自动上传并出现在「图库」里，每张图下方有三个复制按钮
+
+上传时会自动改名成 `原文件名-4位随机码.扩展名`；`image`、`blob`、`screenshot`、`clipboard` 这类通用名会换成 `img-年月日-时分秒` 形式，避免互相覆盖。同名图片不会被覆盖，后端直接返回 `409`。
+
+## 四种链接
+
+点图库里的图片可以放大预览，预览窗口和图库里都能拿到这些链接：
+
+| 形式 | 用途 |
+| --- | --- |
+| 直链 | `https://polytrack114514.github.io/img/xxx.png`，直接贴进浏览器或软件里 |
+| Markdown | `![xxx](直链)`，写文档、写博客用 |
+| HTML | `<img src="直链" alt="xxx" />`，写网页用 |
+| 下载 | 走后端 `/download`，强制下载而不是在浏览器里打开 |
+
+图库按**上传时间倒序**排列，最新的在最前；标题旁会显示图片数量和总占用空间。
+
+## 删除与回收站
+
+每张图右侧有「删除」。删除是**软删除**：图片会被挪到仓库的 `.trash/` 目录，页面右上角「回收站」里能找到它，并可以：
+
+- **恢复**：原路放回图库
+- **彻底删除**：真正从仓库里删掉
+- **清空回收站**：一次删掉全部
+
+回收站里的图片同样占用仓库空间，确认不要了记得彻底删除。
+
+**上传和删除需要口令**：在「上传图片」卡片的口令框里输入，浏览器会记住；口令由后端校验，不填或填错一律 `403`，绕过网页直接调接口同样无效。浏览和下载不需要口令。
+
+## 架构
+
+```
+浏览器（GitHub Pages 页面）
+        │  POST /upload  /delete  /trash   GET /list  /stats  /download  /trash
+        ▼
+Cloudflare Pages 后端  https://img-bed-84l.pages.dev
+        │  携带 GitHub 令牌
+        ▼
+GitHub 仓库 polytrack114514/img
+```
+
+- 前端：本仓库 `index.html`，由 GitHub Pages 托管，是纯静态页面
+- 后端：Cloudflare Pages 上的 `_worker.js`，持有 GitHub 令牌，对外提供上传/删除/列表接口
+- 前端通过仓库里的 `backend.json` 得知后端地址：
+
+```json
+{ "workerUrl": "https://img-bed-84l.pages.dev", "password": "" }
+```
+
+后端环境变量：
+
+| 变量 | 值 |
+| --- | --- |
+| `GH_TOKEN` | 加密变量，GitHub 令牌（不对外暴露） |
+| `REPO_OWNER` | `polytrack114514` |
+| `REPO_NAME` | `img` |
+| `BRANCH` | `main` |
+| `ALLOW_ORIGIN` | `https://polytrack114514.github.io` |
+| `UPLOAD_PASSWORD` | 加密变量，上传/删除口令（已设置） |
+
+## 保护机制
+
+`backend.json`、`index.html`、`README.md`、`worker.js` 这四个基础文件受后端**强制保护**：覆盖或删除一律 `403`，即使绕过网页直接调接口也无效。图片只在仓库根目录存放，文件名不能与这四个文件重名。
+
+## 限制
+
+- 单张图片最大 **20 MB**，前端与后端双重校验，后端超限返回 `413`
+- 只接受图片扩展名：`jpg` `jpeg` `png` `gif` `webp` `svg` `bmp` `avif` `ico` `tif` `tiff` `heic` `apng` `jfif`，其他类型返回 `415`
+- 本仓库是**公开仓库**，上传的图片任何人可见，请勿存放私密内容
+- `.meta.json` 由后端自动维护，记录每张图的上传时间，界面不显示，请勿手改
+- `.trash/` 是回收站目录，界面不显示，不参与统计，但占用仓库空间
+
+## 接口
+
+- `GET /list` 根目录图片列表（带 `uploadedAt`，按时间倒序）
+- `GET /stats` 图片数量、总字节数、是否需要口令
+- `GET /trash` 回收站列表
+- `GET /download?name=文件` 强制下载
+- `POST /upload` 上传（需口令）
+- `POST /delete` 软删除到回收站（需口令）
+- `POST /trash` `action=restore|purge|empty`（需口令）
+
+## 仓库文件
+
+| 文件 | 说明 |
+| --- | --- |
+| `index.html` | 图床页面（GitHub Pages 托管） |
+| `backend.json` | 后端地址配置 |
+| `worker.js` | 后端源码（令牌存于云端环境变量，不在代码里） |
+| `README.md` | 本说明 |
