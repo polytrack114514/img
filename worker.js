@@ -268,18 +268,31 @@ export default {
         const bytes = Math.floor((b64.length * 3) / 4);
         if (bytes > MAX_BYTES) return json({ error: '单张图片不能超过 20 MB' }, 413, cors);
 
+        // 同名图片不覆盖：自动改成「名字-1 / 名字-2 …」，保证老图和已分享的链接都不失效
+        let finalName = name;
         const head = await gh(contentsPath(name));
-        if (head.ok) return json({ error: '「' + name + '」已存在，请换个名字', exists: true }, 409, cors);
+        if (head.ok) {
+          const dot = name.lastIndexOf('.');
+          const ext = dot > 0 ? name.slice(dot) : '';
+          const stem = (dot > 0 ? name.slice(0, dot) : name).slice(0, Math.max(1, 116 - ext.length));
+          finalName = '';
+          for (let i = 1; i <= 60; i++) {
+            const candidate = stem + '-' + i + ext;
+            const h = await gh(contentsPath(candidate));
+            if (!h.ok) { finalName = candidate; break; }
+          }
+          if (!finalName) return json({ error: '同名图片已经有太多份，请换个名字', exists: true }, 409, cors);
+        }
 
-        const w = await putFile(name, b64, 'upload: ' + name);
+        const w = await putFile(finalName, b64, 'upload: ' + finalName);
         if (!w.ok) {
           const t = await w.text();
           return json({ error: '写入仓库失败（HTTP ' + w.status + '）', detail: t.slice(0, 200) }, w.status, cors);
         }
 
         const now = new Date().toISOString();
-        await writeMeta({ [name]: now });
-        return json({ ok: true, name, size: bytes, uploadedAt: now }, 201, cors);
+        await writeMeta({ [finalName]: now });
+        return json({ ok: true, name: finalName, renamed: finalName !== name, size: bytes, uploadedAt: now }, 201, cors);
       }
 
       // ---------- 删除（软删除到回收站） ----------
