@@ -66,6 +66,29 @@ const safeName = (raw) =>
     .trim()
     .slice(0, 120);
 
+/** 访问令牌存在 KV 里：key 为 t:令牌，value 为 { name, createdAt } */
+const TOKEN_PREFIX = 't:';
+
+const genToken = () => {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += (b[i] + 256).toString(16).slice(1);
+  return 'img_' + s;
+};
+
+/** 校验口令：主口令 UPLOAD_PASSWORD，或 KV 里未吊销的访问令牌，都算通过 */
+const authOk = async (password, env) => {
+  if (!env.UPLOAD_PASSWORD && !env.TOKENS) return true;
+  const p = String(password || '');
+  if (env.UPLOAD_PASSWORD && p === env.UPLOAD_PASSWORD) return true;
+  if (env.TOKENS && p) {
+    const rec = await env.TOKENS.get(TOKEN_PREFIX + p);
+    if (rec) return true;
+  }
+  return false;
+};
+
 export default {
   async fetch(request, env) {
     const cors = {
@@ -226,7 +249,49 @@ export default {
             !isProtected(it.path)
         );
         const bytes = files.reduce((sum, it) => sum + (it.size || 0), 0);
-        return json({ images: files.length, bytes, passwordRequired: !!env.UPLOAD_PASSWORD }, 200, cors);
+        return json({ images: files.length, bytes, passwordRequired: !!(env.UPLOAD_PASSWORD || env.TOKENS) }, 200, cors);
+      }
+
+      // ---------- 访问令牌管理（只能用主口令操作） ----------
+      if (request.method === 'POST' && route === '/tokens') {
+        if (!env.TOKENS) return json({ error: '后端未绑定 KV 命名空间，令牌功能不可用' }, 500, cors);
+        if (!env.UPLOAD_PASSWORD) return json({ error: '请先在环境变量里配置 UPLOAD_PASSWORD 作为管理口令' }, 500, cors);
+        if (body.password !== env.UPLOAD_PASSWORD) return json({ error: '管理口令错误' }, 403, cors);
+
+        if (body.action === 'list') {
+          const listed = await env.TOKENS.list({ prefix: TOKEN_PREFIX, limit: 100 });
+          const items = [];
+          for (const k of listed.keys || []) {
+            const raw = await env.TOKENS.get(k.name);
+            let info = {};
+            try { info = JSON.parse(raw || '{}') || {}; } catch (e) { info = {}; }
+            items.push({
+              token: k.name.slice(TOKEN_PREFIX.length),
+              name: info.name || '',
+              createdAt: info.createdAt || (k.metadata && k.metadata.createdAt) || null,
+            });
+          }
+          items.sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
+          return json(items, 200, cors);
+        }
+
+        if (body.action === 'create') {
+          const token = genToken();
+          const label = String(body.name || '').trim().slice(0, 40) ||
+            ('令牌 ' + new Date().toISOString().slice(0, 16).replace('T', ' '));
+          const createdAt = new Date().toISOString();
+          await env.TOKENS.put(TOKEN_PREFIX + token, JSON.stringify({ name: label, createdAt }));
+          return json({ ok: true, token, name: label, createdAt }, 201, cors);
+        }
+
+        if (body.action === 'revoke') {
+          const token = String(body.token || '').trim();
+          if (!token) return json({ error: '缺少令牌' }, 400, cors);
+          await env.TOKENS.delete(TOKEN_PREFIX + token);
+          return json({ ok: true, revoked: token }, 200, cors);
+        }
+
+        return json({ error: '未知操作' }, 400, cors);
       }
 
       // ---------- 回收站列表 ----------
@@ -250,8 +315,8 @@ export default {
 
       // ---------- 上传 ----------
       if (request.method === 'POST' && route === '/upload') {
-        if (env.UPLOAD_PASSWORD && body.password !== env.UPLOAD_PASSWORD) {
-          return json({ error: '口令错误' }, 403, cors);
+        if (!(await authOk(body.password, env))) {
+          return json({ error: '口令或令牌无效' }, 403, cors);
         }
         const name = safeName(body.name);
         if (!name) return json({ error: '缺少文件名' }, 400, cors);
@@ -297,8 +362,8 @@ export default {
 
       // ---------- 删除（软删除到回收站） ----------
       if (request.method === 'POST' && route === '/delete') {
-        if (env.UPLOAD_PASSWORD && body.password !== env.UPLOAD_PASSWORD) {
-          return json({ error: '口令错误' }, 403, cors);
+        if (!(await authOk(body.password, env))) {
+          return json({ error: '口令或令牌无效' }, 403, cors);
         }
         const name = safeName(body.name);
         if (!name) return json({ error: '缺少文件名' }, 400, cors);
@@ -322,8 +387,8 @@ export default {
 
       // ---------- 回收站操作：恢复 / 彻底删除 / 清空 ----------
       if (request.method === 'POST' && route === '/trash') {
-        if (env.UPLOAD_PASSWORD && body.password !== env.UPLOAD_PASSWORD) {
-          return json({ error: '口令错误' }, 403, cors);
+        if (!(await authOk(body.password, env))) {
+          return json({ error: '口令或令牌无效' }, 403, cors);
         }
         const name = safeName(body.name);
 
