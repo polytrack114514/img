@@ -55,6 +55,19 @@
 
 令牌只能查看、生成、吊销，不能反向管理令牌，所以拿到令牌的设备收不回管理员权限。令牌存在 Cloudflare KV（绑定名 `TOKENS`），不需要重新部署就能生效。
 
+## 隐藏的图床
+
+上传卡片右边的「隐藏的图床」按钮，是给**不能公开**的图片用的：
+
+- 这些图片**不写入 GitHub 仓库**，而是存在 Cloudflare KV（绑定名 `SECRET`），所以没有任何可以公开打开的直链，`https://polytrack114514.github.io/img/文件名` 会 404
+- 列表、查看、删除都要先在口令框里输入口令（主口令或访问令牌都能用）
+- 每张图用「查看」在弹层里显示（走接口取图，前端转成临时 blob，不落缓存），用「链接」复制分享地址
+- 分享地址形如 `https://polytrack114514.github.io/img/?secret=文件名`，对方打开后必须输入口令才能看到图片
+- 单张最多 **10 MB**（KV 单值 25 MB 的上限），同名会自动加序号
+- 删除是彻底的，没有回收站
+
+KV 免费额度是 1 GB 存储、每天 1000 次写入，够个人放少量私密图；大量存放不适合。
+
 ## 架构
 
 ```
@@ -91,6 +104,7 @@ GitHub 仓库 polytrack114514/img
 | 绑定 | 说明 |
 | --- | --- |
 | `TOKENS` | Cloudflare KV 命名空间 `img-tokens`，存访问令牌 |
+| `SECRET` | Cloudflare KV 命名空间 `img-secret`，存隐藏图床的图片 |
 
 ## 保护机制
 
@@ -114,6 +128,10 @@ GitHub 仓库 polytrack114514/img
 - `POST /delete` 软删除到回收站（需主口令或令牌）
 - `POST /trash` `action=restore|purge|empty`（需主口令或令牌）
 - `POST /tokens` `action=list|create|revoke`，管理访问令牌（只接受主口令）
+- `POST /secret/list` 隐藏图床列表（需口令）
+- `POST /secret/upload` 上传隐藏图片（需口令）
+- `POST /secret/image` 取隐藏图片二进制（需口令）
+- `POST /secret/delete` 删除隐藏图片（需口令）
 
 ## 仓库文件
 
