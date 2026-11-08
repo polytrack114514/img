@@ -23,7 +23,7 @@
 
 | 形式 | 用途 |
 | --- | --- |
-| 直链 | `https://polytrack114514.github.io/img/xxx.png`，直接贴进浏览器或软件里 |
+| 直链 | `https://img-bed-84l.pages.dev/i/xxx.png`，走 Cloudflare 边缘缓存，比 github.io 快；原地址 `https://polytrack114514.github.io/img/xxx.png` 依然可用 |
 | Markdown | `![xxx](直链)`，写文档、写博客用 |
 | HTML | `<img src="直链" alt="xxx" />`，写网页用 |
 | 下载 | 走后端 `/download`，强制下载而不是在浏览器里打开 |
@@ -121,6 +121,7 @@ GitHub 仓库 polytrack114514/img
 ## 接口
 
 - `GET /list` 根目录图片列表（带 `uploadedAt`，按时间倒序）
+- `GET /i/文件名` 图片直链加速，反代 GitHub 原图并缓存 1 小时
 - `GET /stats` 图片数量、总字节数、是否需要口令
 - `GET /trash` 回收站列表
 - `GET /download?name=文件` 强制下载
