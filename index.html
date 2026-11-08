@@ -210,6 +210,15 @@
   .lb-foot { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
   .lb-meta { color: var(--muted); font-size: 12px; margin-right: auto; }
 
+  .foot {
+    margin-top: 26px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    text-align: center; font-size: 12px; line-height: 1.9; color: var(--muted);
+  }
+  .foot a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .foot a:hover { text-decoration: underline; }
+  .foot .copy { margin-top: 6px; font-size: 11.5px; }
+
   @media (max-width: 620px) {
     .wrap { padding: 18px 12px 70px; }
     .card { padding: 14px; }
@@ -360,6 +369,13 @@
     </div>
     <div class="hint">删除的图片会先移到仓库的 <code>.trash</code> 目录，可以点「恢复」放回；只有「彻底删除」才会真正移除。</div>
   </section>
+
+  <footer class="foot">
+    <div>创作者：Shen Xiong</div>
+    <div>联系作者邮箱：<a href="mailto:polytrack1@outlook.com">polytrack1@outlook.com</a> · 作者B站号：<a href="https://space.bilibili.com/3493133302106318/upload/video" target="_blank" rel="noopener">https://space.bilibili.com/3493133302106318/upload/video</a></div>
+    <div>致谢 AI：TRAE CN {DeepSeek-V4.1-Flash}</div>
+    <div class="copy">© 2026 img.</div>
+  </footer>
 </div>
 
 <div class="lightbox" id="lightbox" hidden>
