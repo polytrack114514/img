@@ -19,6 +19,26 @@
     --err: #f0626b;
     --radius: 14px;
   }
+  :root[data-theme="light"] {
+    --bg: #f2f4f8;
+    --surface: #ffffff;
+    --surface-2: #f1f3f9;
+    --border: #dfe3ec;
+    --border-strong: #c7cedb;
+    --text: #1b2030;
+    --muted: #66708a;
+    --accent: #2f6bff;
+    --accent-soft: rgba(47, 107, 255, .1);
+    --ok: #1f9d63;
+    --err: #d64550;
+  }
+  :root[data-theme="light"] body {
+    background: radial-gradient(1200px 600px at 15% -10%, #e6efff 0%, transparent 60%), var(--bg);
+  }
+  :root[data-theme="light"] .btn:hover { background: #eef2fb; }
+  :root[data-theme="light"] .toast { background: #ffffff; box-shadow: 0 16px 40px -12px rgba(20, 30, 60, .18); }
+  :root[data-theme="light"] .thumb { background: #eef1f7; }
+  :root[data-theme="light"] .lb-body { background: #f4f6fb; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   [hidden] { display: none !important; }
@@ -208,6 +228,9 @@
     .toast { bottom: 16px; font-size: 12.5px; }
   }
 </style>
+<script>
+  try { if (localStorage.getItem('img_theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -221,10 +244,13 @@
         <div class="sub">粘贴即上传 · 直链 / Markdown / HTML 一键复制</div>
       </div>
     </div>
-    <a class="repo-chip" id="repoLink" href="#" target="_blank" rel="noopener">
-      <span class="dot" id="statusDot"></span>
-      <span id="repoLabel">polytrack114514/img</span>
-    </a>
+    <div class="row">
+      <button class="btn sm ghost" id="btnTheme">亮色</button>
+      <a class="repo-chip" id="repoLink" href="#" target="_blank" rel="noopener">
+        <span class="dot" id="statusDot"></span>
+        <span id="repoLabel">polytrack114514/img</span>
+      </a>
+    </div>
   </header>
 
   <div class="banner" id="banner" hidden>
@@ -1131,6 +1157,7 @@
       toast(ok ? '后端已就绪' : '仍未读到 backend.json 里的 workerUrl', ok ? 'ok' : 'err');
       if (ok) { loadImages(); loadStats(); }
     });
+    $('btnTheme').addEventListener('click', toggleTheme);
 
     const drop = $('drop');
     drop.addEventListener('click', () => ready && $('fileInput').click());
@@ -1230,11 +1257,28 @@
     $('lbCopyHtml').addEventListener('click', () => lightboxName && copy('html', lightboxName));
   }
 
+  // ---------- 主题 ----------
+  const THEME_KEY = 'img_theme';
+
+  function applyTheme(t) {
+    const light = t === 'light';
+    if (light) document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    $('btnTheme').textContent = light ? '暗色' : '亮色';
+  }
+
+  function toggleTheme() {
+    const light = document.documentElement.getAttribute('data-theme') !== 'light';
+    try { localStorage.setItem(THEME_KEY, light ? 'light' : 'dark'); } catch (e) {}
+    applyTheme(light ? 'light' : 'dark');
+  }
+
   // ---------- 启动 ----------
   async function init() {
     $('repoLink').href = 'https://github.com/' + CFG.owner + '/' + CFG.repo;
     $('repoLabel').textContent = CFG.owner + '/' + CFG.repo;
     bind();
+    applyTheme((function () { try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch (e) { return 'dark'; } })());
     await loadBackendConfig();
     $('fPass').value = storedPass() || backend.password || '';
     loadImages();
