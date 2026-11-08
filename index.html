@@ -237,6 +237,7 @@
       <div class="card-title">上传图片</div>
       <div class="row">
         <input type="password" id="fPass" placeholder="口令或令牌" autocomplete="off" />
+        <button class="btn sm ghost" id="btnSecret">隐藏的图床</button>
         <button class="btn sm ghost" id="btnTokens">令牌</button>
         <button class="btn sm ghost" id="btnReload">重连</button>
       </div>
@@ -275,6 +276,31 @@
     </div>
     <div class="gallery" id="gallery">
       <div class="empty">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="card" id="secretCard" hidden>
+    <div class="card-head">
+      <div class="card-title">隐藏的图床<span class="stat" id="secretStat"></span></div>
+      <div class="row">
+        <button class="btn sm" id="btnSecretPick">选择图片</button>
+        <button class="btn sm ghost" id="btnSecretClose">收起</button>
+      </div>
+    </div>
+    <div class="drop" id="secretDrop">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12L4 7.5"/>
+      </svg>
+      <div class="drop-main">拖拽图片到这里，或点击选择</div>
+      <div class="drop-sub">不写入公开仓库，只能凭口令查看 · 单张 ≤ 10 MB</div>
+    </div>
+    <input type="file" id="secretFile" accept="image/*" multiple hidden />
+    <div class="tlist" id="secretList">
+      <div class="empty">正在加载…</div>
+    </div>
+    <div class="hint">
+      这里的图片存在 Cloudflare KV，不在公开仓库里，所以没有可以公开打开的直链。
+      分享给别人请用「链接」，对方打开后需要输入口令才能看到图片。
     </div>
   </section>
 
@@ -350,6 +376,10 @@
   let ready = false;
   let images = [];
   let tokens = [];
+  let secretItems = [];
+  let lbIsSecret = false;
+  let lbBlobUrl = '';
+  let pendingSecret = '';
   let imageQuery = '';
   let imageExt = 'all';
   let imageTime = 'all';
@@ -623,6 +653,11 @@
   // ---------- 大图 ----------
   function openLightbox(name) {
     const it = images.find((x) => x.name === name);
+    if (lbBlobUrl) { URL.revokeObjectURL(lbBlobUrl); lbBlobUrl = ''; }
+    lbIsSecret = false;
+    $('lbCopyMd').hidden = false;
+    $('lbCopyHtml').hidden = false;
+    $('lbDownload').removeAttribute('download');
     lightboxName = name;
     $('lbName').textContent = name;
     $('lbImg').src = imgUrl(name);
@@ -636,6 +671,11 @@
   function closeLightbox() {
     $('lightbox').hidden = true;
     $('lbImg').src = '';
+    if (lbBlobUrl) { URL.revokeObjectURL(lbBlobUrl); lbBlobUrl = ''; }
+    lbIsSecret = false;
+    $('lbCopyMd').hidden = false;
+    $('lbCopyHtml').hidden = false;
+    $('lbDownload').removeAttribute('download');
     lightboxName = '';
   }
 
@@ -869,6 +909,137 @@
     }
   }
 
+  // ---------- 隐藏的图床 ----------
+  function secretShare(name) {
+    return siteBase() + '?secret=' + encodeURIComponent(name);
+  }
+
+  function renderSecret() {
+    if (!secretItems.length) {
+      $('secretStat').textContent = '';
+      $('secretList').innerHTML = '<div class="empty">还没有隐藏图片，拖一张进来试试</div>';
+      return;
+    }
+    $('secretStat').textContent = '共 ' + secretItems.length + ' 张';
+    $('secretList').innerHTML = secretItems.map((it) =>
+      '<div class="trow">' +
+        '<div class="grow">' +
+          '<div class="fname">' + esc(it.name) + '</div>' +
+          '<div class="fmeta">' + fmtSize(it.size) + (it.uploadedAt ? ' · ' + fmtTime(it.uploadedAt) : '') + '</div>' +
+        '</div>' +
+        '<div class="row">' +
+          '<button class="btn sm" data-sview="' + esc(it.name) + '">查看</button>' +
+          '<button class="btn sm" data-slink="' + esc(it.name) + '">链接</button>' +
+          '<button class="btn sm danger" data-sdel="' + esc(it.name) + '">删除</button>' +
+        '</div>' +
+      '</div>').join('');
+
+    $('secretList').querySelectorAll('[data-sview]').forEach((el) => {
+      el.addEventListener('click', () => openSecretImage(el.dataset.sview));
+    });
+    $('secretList').querySelectorAll('[data-slink]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const url = secretShare(el.dataset.slink);
+        const ok = await copyText(url);
+        toast(ok ? '已复制链接：' + url : '复制失败，请手动复制：' + url, ok ? 'ok' : 'err');
+      });
+    });
+    $('secretList').querySelectorAll('[data-sdel]').forEach((el) => {
+      el.addEventListener('click', () => deleteSecret(el.dataset.sdel));
+    });
+  }
+
+  async function loadSecret() {
+    if (!ready) {
+      $('secretList').innerHTML = '<div class="empty">后端未配置，暂时无法读取隐藏图床</div>';
+      return;
+    }
+    const pass = getPass();
+    if (!pass) return;
+    $('secretList').innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+    try {
+      const items = await postJSON(workerBase() + '/secret/list', { password: pass });
+      secretItems = Array.isArray(items) ? items : [];
+      renderSecret();
+    } catch (e) {
+      $('secretStat').textContent = '';
+      $('secretList').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function uploadSecret(files) {
+    if (!ready) { toast('后端未配置，暂时无法上传', 'err'); return; }
+    const pass = getPass();
+    if (!pass) return;
+    const list = Array.from(files).filter((f) =>
+      /^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(f.name || ''));
+    if (!list.length) { toast('没有可上传的图片', 'err'); return; }
+    for (const f of list) {
+      if (f.size > 10 * 1024 * 1024) {
+        toast('「' + (f.name || '图片') + '」超过 10 MB，已跳过', 'err');
+        continue;
+      }
+      try {
+        const b64 = await fileToBase64(f);
+        const r = await postJSON(workerBase() + '/secret/upload', {
+          name: makeName(f), content: b64, password: pass,
+        });
+        secretItems.unshift({ name: r.name, size: r.size, uploadedAt: r.uploadedAt });
+        renderSecret();
+        toast(r.renamed ? '已上传，重名改存为 ' + r.name : '已上传 ' + r.name, 'ok');
+      } catch (e) {
+        toast('「' + (f.name || '图片') + '」上传失败：' + e.message, 'err');
+      }
+    }
+  }
+
+  async function openSecretImage(name) {
+    const pass = getPass();
+    if (!pass) return;
+    try {
+      const res = await fetch(workerBase() + '/secret/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, password: pass }),
+      });
+      if (!res.ok) {
+        let msg = 'HTTP ' + res.status;
+        try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      if (lbBlobUrl) { URL.revokeObjectURL(lbBlobUrl); lbBlobUrl = ''; }
+      lbBlobUrl = URL.createObjectURL(blob);
+      lbIsSecret = true;
+      lightboxName = name;
+      $('lbName').textContent = name;
+      $('lbImg').src = lbBlobUrl;
+      $('lbMeta').textContent = '隐藏图片 · ' + fmtSize(blob.size);
+      $('lbOpen').href = lbBlobUrl;
+      $('lbDownload').href = lbBlobUrl;
+      $('lbDownload').setAttribute('download', name);
+      $('lbCopyMd').hidden = true;
+      $('lbCopyHtml').hidden = true;
+      $('lightbox').hidden = false;
+    } catch (e) {
+      toast('查看失败：' + e.message, 'err');
+    }
+  }
+
+  async function deleteSecret(name) {
+    if (!confirm('删除「' + name + '」？隐藏图片删除后无法恢复。')) return;
+    const pass = getPass();
+    if (!pass) return;
+    try {
+      await postJSON(workerBase() + '/secret/delete', { name, password: pass });
+      secretItems = secretItems.filter((it) => it.name !== name);
+      renderSecret();
+      toast('已删除 ' + name, 'ok');
+    } catch (e) {
+      toast('删除失败：' + e.message, 'err');
+    }
+  }
+
   // ---------- 访问令牌 ----------
   function renderTokens() {
     if (!tokens.length) {
@@ -1004,6 +1175,27 @@
     $('btnTrashClose').addEventListener('click', () => { $('trashCard').hidden = true; });
     $('btnTrashEmpty').addEventListener('click', emptyTrash);
 
+    $('btnSecret').addEventListener('click', () => {
+      if (!$('secretCard').hidden) { $('secretCard').hidden = true; return; }
+      $('secretCard').hidden = false;
+      loadSecret();
+    });
+    $('btnSecretClose').addEventListener('click', () => { $('secretCard').hidden = true; });
+    $('btnSecretPick').addEventListener('click', () => ready && $('secretFile').click());
+    $('secretFile').addEventListener('change', (e) => { uploadSecret(e.target.files); e.target.value = ''; });
+
+    const secretDrop = $('secretDrop');
+    secretDrop.addEventListener('click', () => ready && $('secretFile').click());
+    ['dragenter', 'dragover'].forEach((ev) => {
+      secretDrop.addEventListener(ev, (e) => { e.preventDefault(); secretDrop.classList.add('over'); });
+    });
+    secretDrop.addEventListener('dragleave', () => secretDrop.classList.remove('over'));
+    secretDrop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      secretDrop.classList.remove('over');
+      uploadSecret(e.dataTransfer.files);
+    });
+
     $('btnTokens').addEventListener('click', () => {
       if (!$('tokenCard').hidden) { $('tokenCard').hidden = true; return; }
       $('tokenCard').hidden = false;
@@ -1015,13 +1207,25 @@
     $('fPass').addEventListener('input', (e) => {
       try { localStorage.setItem(PASS_KEY, e.target.value); } catch (err) {}
     });
+    $('fPass').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && pendingSecret) openSecretImage(pendingSecret);
+    });
 
     $('lbClose').addEventListener('click', closeLightbox);
     $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) closeLightbox(); });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !$('lightbox').hidden) closeLightbox();
     });
-    $('lbCopyUrl').addEventListener('click', () => lightboxName && copy('url', lightboxName));
+    $('lbCopyUrl').addEventListener('click', async () => {
+      if (!lightboxName) return;
+      if (lbIsSecret) {
+        const url = secretShare(lightboxName);
+        const ok = await copyText(url);
+        toast(ok ? '已复制隐藏图片链接：' + url : '复制失败，请手动复制：' + url, ok ? 'ok' : 'err');
+        return;
+      }
+      copy('url', lightboxName);
+    });
     $('lbCopyMd').addEventListener('click', () => lightboxName && copy('md', lightboxName));
     $('lbCopyHtml').addEventListener('click', () => lightboxName && copy('html', lightboxName));
   }
@@ -1035,6 +1239,18 @@
     $('fPass').value = storedPass() || backend.password || '';
     loadImages();
     loadStats();
+
+    pendingSecret = new URLSearchParams(location.search).get('secret') || '';
+    if (pendingSecret) {
+      $('secretCard').hidden = false;
+      if ($('fPass').value.trim()) {
+        loadSecret();
+        openSecretImage(pendingSecret);
+      } else {
+        toast('这个链接需要口令：在上面输入口令后按回车', 'err');
+        $('fPass').focus();
+      }
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
