@@ -89,6 +89,37 @@ const authOk = async (password, env) => {
   return false;
 };
 
+/** 隐藏图床：图片存在 KV（SECRET），不写公开仓库，所以没有可公开访问的直链 */
+const SECRET_PREFIX = 'p:';
+const SECRET_INDEX = 'i:index';
+const SECRET_MAX_BYTES = 10 * 1024 * 1024;
+
+const readSecretIndex = async (env) => {
+  const raw = await env.SECRET.get(SECRET_INDEX);
+  try {
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const writeSecretIndex = (env, arr) => env.SECRET.put(SECRET_INDEX, JSON.stringify(arr));
+
+const MIME = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp',
+  avif: 'image/avif', ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff',
+  heic: 'image/heic', apng: 'image/apng',
+};
+
+const b64ToBytes = (s) => {
+  const bin = atob(String(s || '').replace(/\s/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+};
+
 export default {
   async fetch(request, env) {
     const cors = {
@@ -289,6 +320,82 @@ export default {
           if (!token) return json({ error: '缺少令牌' }, 400, cors);
           await env.TOKENS.delete(TOKEN_PREFIX + token);
           return json({ ok: true, revoked: token }, 200, cors);
+        }
+
+        return json({ error: '未知操作' }, 400, cors);
+      }
+
+      // ---------- 隐藏的图床（私有，存 KV，需口令） ----------
+      if (request.method === 'POST' && route.indexOf('/secret/') === 0) {
+        if (!env.SECRET) return json({ error: '后端未绑定 KV 命名空间 SECRET，隐藏图床不可用' }, 500, cors);
+        if (!(await authOk(body.password, env))) return json({ error: '口令或令牌无效' }, 403, cors);
+
+        if (route === '/secret/list') {
+          const items = (await readSecretIndex(env)).slice();
+          items.sort((a, b) => (Date.parse(b.uploadedAt || 0) || 0) - (Date.parse(a.uploadedAt || 0) || 0));
+          return json(items, 200, cors);
+        }
+
+        if (route === '/secret/upload') {
+          const name = safeName(body.name);
+          if (!name) return json({ error: '缺少文件名' }, 400, cors);
+          if (ALLOW_EXT.indexOf(extOf(name)) < 0) {
+            return json({ error: '只支持图片格式：' + ALLOW_EXT.join(' / ') }, 415, cors);
+          }
+          const b64 = String(body.content || '').replace(/\s/g, '');
+          if (!b64) return json({ error: '缺少图片内容' }, 400, cors);
+          const size = b64ToBytes(b64).length;
+          if (size > SECRET_MAX_BYTES) return json({ error: '隐藏图床单张不能超过 10 MB' }, 413, cors);
+
+          const index = await readSecretIndex(env);
+          const taken = {};
+          index.forEach((it) => { taken[it.name] = true; });
+
+          let finalName = name;
+          if (taken[name]) {
+            const dot = name.lastIndexOf('.');
+            const ext = dot > 0 ? name.slice(dot) : '';
+            const stem = (dot > 0 ? name.slice(0, dot) : name).slice(0, Math.max(1, 116 - ext.length));
+            finalName = '';
+            for (let i = 1; i <= 60; i++) {
+              const candidate = stem + '-' + i + ext;
+              if (!taken[candidate]) { finalName = candidate; break; }
+            }
+            if (!finalName) return json({ error: '同名图片已经有太多份，请换个名字' }, 409, cors);
+          }
+
+          const at = new Date().toISOString();
+          await env.SECRET.put(SECRET_PREFIX + finalName, b64, {
+            metadata: { size, uploadedAt: at },
+          });
+          index.push({ name: finalName, size, uploadedAt: at });
+          await writeSecretIndex(env, index);
+          return json({ ok: true, name: finalName, renamed: finalName !== name, size, uploadedAt: at }, 201, cors);
+        }
+
+        if (route === '/secret/image') {
+          const name = safeName(body.name);
+          if (!name) return json({ error: '缺少文件名' }, 400, cors);
+          const b64 = await env.SECRET.get(SECRET_PREFIX + name);
+          if (!b64) return json({ error: '图片不存在' }, 404, cors);
+          return new Response(b64ToBytes(b64), {
+            status: 200,
+            headers: {
+              ...cors,
+              'Content-Type': MIME[extOf(name)] || 'application/octet-stream',
+              'Cache-Control': 'private, no-store',
+              'X-Content-Type-Options': 'nosniff',
+            },
+          });
+        }
+
+        if (route === '/secret/delete') {
+          const name = safeName(body.name);
+          if (!name) return json({ error: '缺少文件名' }, 400, cors);
+          await env.SECRET.delete(SECRET_PREFIX + name);
+          const index = (await readSecretIndex(env)).filter((it) => it.name !== name);
+          await writeSecretIndex(env, index);
+          return json({ ok: true }, 200, cors);
         }
 
         return json({ error: '未知操作' }, 400, cors);
