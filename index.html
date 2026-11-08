@@ -72,14 +72,25 @@
     color: #e9c184;
   }
 
-  input[type="password"] {
+  input[type="password"], input[type="text"] {
     width: 130px; background: var(--surface-2); color: var(--text);
     border: 1px solid var(--border); border-radius: 10px;
     padding: 8px 11px; font-size: 13px; font-family: inherit;
     outline: none; transition: border-color .16s, box-shadow .16s;
   }
-  input[type="password"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input[type="password"]:focus, input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   input::placeholder { color: #5c6474; }
+
+  .gbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .gbar input[type="text"] { width: 100%; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+    padding: 4px 11px; border-radius: 999px; font-size: 12px; font-family: inherit; cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); }
+  .chip.on { border-color: rgba(79,140,255,.55); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -178,6 +189,24 @@
   .lb-body img { max-width: 100%; max-height: 62vh; border-radius: 8px; }
   .lb-foot { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
   .lb-meta { color: var(--muted); font-size: 12px; margin-right: auto; }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 18px 12px 70px; }
+    .card { padding: 14px; }
+    .card-head { gap: 8px; margin-bottom: 10px; }
+    header { margin-bottom: 16px; }
+    .drop { padding: 24px 14px; }
+    .gallery { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 9px; }
+    .tinfo { padding: 6px 7px; }
+    .tname { font-size: 11.5px; }
+    .tmeta { font-size: 10.5px; }
+    .tacts { padding: 0 7px 8px; gap: 3px; }
+    .tacts .btn { padding: 3px 6px; font-size: 10.5px; }
+    .lightbox { padding: 10px; }
+    .lb-body img { max-height: 52vh; }
+    .lb-foot { padding: 10px 12px; }
+    .toast { bottom: 16px; font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
@@ -238,6 +267,11 @@
         <button class="btn sm ghost" id="btnTrash">回收站</button>
         <button class="btn sm ghost" id="btnRefresh">刷新</button>
       </div>
+    </div>
+    <div class="gbar">
+      <input type="text" id="fSearch" placeholder="搜索文件名…" autocomplete="off" />
+      <div class="filters" id="extFilters"></div>
+      <div class="filters" id="timeFilters"></div>
     </div>
     <div class="gallery" id="gallery">
       <div class="empty">正在加载…</div>
@@ -316,6 +350,9 @@
   let ready = false;
   let images = [];
   let tokens = [];
+  let imageQuery = '';
+  let imageExt = 'all';
+  let imageTime = 'all';
   let lightboxName = '';
   const queue = [];
   let running = false;
@@ -483,16 +520,70 @@
     }
   }
 
+  const TIME_OPTS = [
+    { key: 'all', label: '全部时间' },
+    { key: 'today', label: '今天' },
+    { key: '7', label: '最近 7 天' },
+    { key: '30', label: '最近 30 天' },
+  ];
+
+  function extName(name) {
+    const i = String(name).lastIndexOf('.');
+    return i > 0 ? String(name).slice(i + 1).toLowerCase() : '';
+  }
+
+  function matchTime(it) {
+    if (imageTime === 'all') return true;
+    const t = it.uploadedAt ? Date.parse(it.uploadedAt) : 0;
+    if (!t) return false;
+    if (imageTime === 'today') {
+      const d = new Date(t);
+      const n = new Date();
+      return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    }
+    return (Date.now() - t) / 86400000 <= Number(imageTime);
+  }
+
+  function filteredImages() {
+    const q = imageQuery.trim().toLowerCase();
+    return images.filter((it) =>
+      (!q || it.name.toLowerCase().indexOf(q) >= 0) &&
+      (imageExt === 'all' || extName(it.name) === imageExt) &&
+      matchTime(it));
+  }
+
   function renderGallery() {
-    if (!images.length) {
-      $('gallery').innerHTML = '<div class="empty" style="grid-column:1/-1">还没有图片，粘贴或拖拽一张试试</div>';
-      $('statLine').textContent = '';
+    const list = filteredImages();
+    const exts = {};
+    images.forEach((it) => { const e = extName(it.name) || '其他'; exts[e] = (exts[e] || 0) + 1; });
+
+    const chip = (key, label, on) =>
+      '<button class="chip' + (on ? ' on' : '') + '" data-ext="' + esc(key) + '">' + label + '</button>';
+    $('extFilters').innerHTML =
+      chip('all', '全部 ' + images.length, imageExt === 'all') +
+      Object.keys(exts).sort().map((e) => chip(e, e.toUpperCase() + ' ' + exts[e], imageExt === e)).join('');
+    $('timeFilters').innerHTML = TIME_OPTS.map((o) =>
+      '<button class="chip' + (imageTime === o.key ? ' on' : '') + '" data-time="' + o.key + '">' + o.label + '</button>').join('');
+
+    $('extFilters').querySelectorAll('.chip').forEach((el) => {
+      el.addEventListener('click', () => { imageExt = el.dataset.ext; renderGallery(); });
+    });
+    $('timeFilters').querySelectorAll('.chip').forEach((el) => {
+      el.addEventListener('click', () => { imageTime = el.dataset.time; renderGallery(); });
+    });
+
+    const allBytes = images.reduce((s, it) => s + (it.size || 0), 0);
+    if (!list.length) {
+      $('gallery').innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+        (images.length ? '没有符合条件的图片' : '还没有图片，粘贴或拖拽一张试试') + '</div>';
+      $('statLine').textContent = images.length ? '共 ' + images.length + ' 张 · ' + fmtSize(allBytes) : '';
       return;
     }
-    const bytes = images.reduce((s, it) => s + (it.size || 0), 0);
-    $('statLine').textContent = '共 ' + images.length + ' 张 · ' + fmtSize(bytes);
+    $('statLine').textContent = (list.length === images.length ? '共 ' + list.length + ' 张' :
+      '筛选出 ' + list.length + ' / ' + images.length + ' 张') +
+      ' · ' + fmtSize(list.reduce((s, it) => s + (it.size || 0), 0));
 
-    $('gallery').innerHTML = images.map((it) => {
+    $('gallery').innerHTML = list.map((it) => {
       const u = imgUrl(it.name);
       return '<div class="tile">' +
         '<img class="thumb" src="' + esc(u) + '" alt="' + esc(it.name) + '" loading="lazy" data-lb="' + esc(it.name) + '" />' +
@@ -522,6 +613,7 @@
 
   async function loadStats() {
     if (!ready) return;
+    if (imageQuery || imageExt !== 'all' || imageTime !== 'all') return;
     try {
       const s = await getJSON(workerBase() + '/stats');
       $('statLine').textContent = '共 ' + (s.images || 0) + ' 张 · ' + fmtSize(s.bytes || 0);
@@ -904,6 +996,7 @@
     });
 
     $('btnRefresh').addEventListener('click', () => { loadImages(); loadStats(); });
+    $('fSearch').addEventListener('input', (e) => { imageQuery = e.target.value; renderGallery(); });
     $('btnTrash').addEventListener('click', () => {
       if (!$('trashCard').hidden) { $('trashCard').hidden = true; return; }
       loadTrash();
