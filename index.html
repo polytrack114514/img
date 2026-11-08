@@ -6,86 +6,63 @@
 <title>图床 · 粘贴即上传</title>
 <style>
   :root {
-    --bg: #04070f;
-    --surface: #0a1220;
-    --surface-2: #0e1a2c;
-    --border: #12263f;
-    --border-strong: #1c3b5e;
-    --text: #d7e9ff;
-    --muted: #6d8fb3;
-    --accent: #00e5ff;
-    --accent-2: #ff3d9a;
-    --accent-soft: rgba(0, 229, 255, .1);
-    --ok: #1fffa8;
-    --err: #ff4d6d;
-    --radius: 6px;
+    --bg: #0d0f14;
+    --surface: #161a22;
+    --surface-2: #1d222c;
+    --border: #2a303c;
+    --border-strong: #3a4152;
+    --text: #e8eaef;
+    --muted: #8b93a3;
+    --accent: #4f8cff;
+    --accent-soft: rgba(79, 140, 255, 0.12);
+    --ok: #35c07a;
+    --err: #f0626b;
+    --radius: 14px;
   }
   :root[data-theme="light"] {
-    --bg: #eef4fb;
+    --bg: #f2f4f8;
     --surface: #ffffff;
-    --surface-2: #e9f1fa;
-    --border: #cfe0f0;
-    --border-strong: #a9c4dd;
-    --text: #0b2136;
-    --muted: #5b7994;
-    --accent: #0096b8;
-    --accent-2: #d1006d;
-    --accent-soft: rgba(0, 150, 184, .12);
-    --ok: #0a9c6b;
-    --err: #d13a55;
+    --surface-2: #f1f3f9;
+    --border: #dfe3ec;
+    --border-strong: #c7cedb;
+    --text: #1b2030;
+    --muted: #66708a;
+    --accent: #2f6bff;
+    --accent-soft: rgba(47, 107, 255, .1);
+    --ok: #1f9d63;
+    --err: #d64550;
   }
   :root[data-theme="light"] body {
-    background:
-      radial-gradient(1200px 600px at 12% -12%, rgba(0, 150, 184, .1) 0%, transparent 60%),
-      linear-gradient(rgba(0, 150, 184, .05) 1px, transparent 1px) 0 0 / 100% 40px,
-      linear-gradient(90deg, rgba(0, 150, 184, .05) 1px, transparent 1px) 0 0 / 40px 100%,
-      var(--bg);
+    background: radial-gradient(1200px 600px at 15% -10%, #e6efff 0%, transparent 60%), var(--bg);
   }
-  :root[data-theme="light"] body::after { opacity: .16; }
-  :root[data-theme="light"] .card { background: #ffffff; box-shadow: 0 8px 26px -22px rgba(11, 33, 54, .35); }
-  :root[data-theme="light"] .btn:hover { background: #e8f4fa; box-shadow: none; }
-  :root[data-theme="light"] .toast { background: #ffffff; box-shadow: 0 16px 40px -18px rgba(11, 33, 54, .3); }
+  :root[data-theme="light"] .btn:hover { background: #eef2fb; }
+  :root[data-theme="light"] .toast { background: #ffffff; box-shadow: 0 16px 40px -12px rgba(20, 30, 60, .18); }
   :root[data-theme="light"] .thumb { background: #eef1f7; }
   :root[data-theme="light"] .lb-body { background: #f4f6fb; }
-  :root[data-theme="light"] h1, :root[data-theme="light"] .card-title { text-shadow: none; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   [hidden] { display: none !important; }
   body {
-    background:
-      radial-gradient(1200px 600px at 12% -12%, rgba(0, 229, 255, .12) 0%, transparent 60%),
-      radial-gradient(900px 500px at 88% 112%, rgba(255, 61, 154, .1) 0%, transparent 62%),
-      linear-gradient(rgba(0, 229, 255, .045) 1px, transparent 1px) 0 0 / 100% 40px,
-      linear-gradient(90deg, rgba(0, 229, 255, .045) 1px, transparent 1px) 0 0 / 40px 100%,
-      var(--bg);
+    background: radial-gradient(1200px 600px at 15% -10%, #1a2438 0%, transparent 60%), var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
       "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
     font-size: 14px; line-height: 1.6; min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
-  body::after {
-    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background: repeating-linear-gradient(0deg, rgba(0, 229, 255, .035) 0 1px, transparent 1px 3px);
-    opacity: .45;
-  }
-  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
 
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
   .brand { display: flex; align-items: center; gap: 12px; }
   .logo {
-    width: 40px; height: 40px; border-radius: 6px; flex: none;
-    background: linear-gradient(140deg, #00e5ff, #ff3d9a);
+    width: 40px; height: 40px; border-radius: 11px; flex: none;
+    background: linear-gradient(140deg, #4f8cff, #7b5cff);
     display: grid; place-items: center;
-    box-shadow: 0 0 26px -6px rgba(0, 229, 255, .75);
+    box-shadow: 0 8px 22px -8px rgba(79, 140, 255, 0.7);
   }
-  .logo svg { width: 20px; height: 20px; fill: #04121c; }
-  h1 {
-    font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 3px; text-transform: uppercase;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    text-shadow: 0 0 20px rgba(0, 229, 255, .45);
-  }
-  .sub { color: var(--muted); font-size: 12px; margin-top: 1px; letter-spacing: .4px; }
+  .logo svg { width: 20px; height: 20px; fill: #fff; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
 
   .repo-chip {
     display: inline-flex; align-items: center; gap: 8px;
@@ -232,43 +209,6 @@
   .lb-body img { max-width: 100%; max-height: 62vh; border-radius: 8px; }
   .lb-foot { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
   .lb-meta { color: var(--muted); font-size: 12px; margin-right: auto; }
-
-  /* ===== 科幻风格 ===== */
-  .card {
-    position: relative;
-    background: linear-gradient(180deg, rgba(10, 18, 32, .94), rgba(6, 11, 20, .9));
-    border: 1px solid var(--border);
-    box-shadow: inset 0 0 0 1px rgba(0, 229, 255, .05), 0 24px 60px -46px rgba(0, 229, 255, .55);
-  }
-  .card::before, .card::after {
-    content: ''; position: absolute; height: 2px; width: 22px; background: var(--accent); opacity: .75;
-  }
-  .card::before { left: -1px; top: -1px; }
-  .card::after { right: -1px; bottom: -1px; background: var(--accent-2); }
-  .card-title {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    letter-spacing: 1.6px; text-transform: uppercase;
-  }
-  .btn { border-radius: 4px; }
-  .btn:hover { border-color: var(--accent); background: rgba(0, 229, 255, .1); box-shadow: 0 0 18px -6px rgba(0, 229, 255, .55); }
-  .btn.danger:hover { border-color: var(--err); background: rgba(255, 77, 109, .12); box-shadow: 0 0 18px -6px rgba(255, 77, 109, .55); }
-  input[type="password"], input[type="text"] { border-radius: 4px; background: rgba(5, 12, 22, .9); }
-  input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), 0 0 20px -8px var(--accent); }
-  .chip { border-radius: 3px; letter-spacing: .5px; }
-  .chip.on { box-shadow: 0 0 16px -6px rgba(0, 229, 255, .6); }
-  .tile { border-radius: 6px; background: rgba(8, 16, 28, .9); }
-  .tile:hover { border-color: var(--accent); box-shadow: 0 0 26px -14px rgba(0, 229, 255, .9); }
-  .drop { background: rgba(0, 229, 255, .02); }
-  .drop:hover, .drop.over { box-shadow: inset 0 0 30px -20px var(--accent); }
-  .trow { border-radius: 5px; }
-  .trow:hover { border-color: var(--border-strong); }
-  .lightbox { background: rgba(2, 5, 12, .9); }
-  .lb-box { border-radius: 6px; box-shadow: 0 0 46px -18px rgba(0, 229, 255, .7); }
-  .toast { border-radius: 4px; }
-  .repo-chip { border-radius: 4px; }
-  :root[data-theme="light"] .card::before, :root[data-theme="light"] .card::after { opacity: .5; }
-  :root[data-theme="light"] .tile { background: #ffffff; }
-  :root[data-theme="light"] .lightbox { background: rgba(232, 241, 250, .92); }
 
   @media (max-width: 620px) {
     .wrap { padding: 18px 12px 70px; }
