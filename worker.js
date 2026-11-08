@@ -245,6 +245,31 @@ export default {
     }
 
     try {
+      // ---------- 图片直链加速：反代 GitHub raw，交给 Cloudflare 边缘缓存 ----------
+      if (request.method === 'GET' && route.indexOf('/i/') === 0) {
+        let name = '';
+        try { name = decodeURIComponent(route.slice(3)); } catch (e) { name = route.slice(3); }
+        if (!name || name.indexOf('/') >= 0) return json({ error: '图片不存在' }, 404, cors);
+        if (ALLOW_EXT.indexOf(extOf(name)) < 0) return json({ error: '图片不存在' }, 404, cors);
+
+        const raw = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' +
+          encodeURIComponent(branch) + '/' + encodeURIComponent(name);
+        const r = await fetch(raw, {
+          cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 3600, '404-499': 60 } },
+        });
+        if (!r.ok) return json({ error: '图片不存在' }, r.status, cors);
+
+        return new Response(r.body, {
+          status: 200,
+          headers: {
+            ...cors,
+            'Content-Type': MIME[extOf(name)] || 'application/octet-stream',
+            'Cache-Control': 'public, max-age=3600',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      }
+
       // ---------- 图片列表 ----------
       if (request.method === 'GET' && route === '/list') {
         const r = await gh(contentsPath(''));
