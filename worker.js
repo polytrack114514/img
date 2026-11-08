@@ -19,7 +19,7 @@ const json = (obj, status, cors) =>
   });
 
 /** 仓库根目录的基础文件：禁止被覆盖或删除，防止站点被破坏 */
-const PROTECTED = ['backend.json', 'index.html', 'README.md', 'worker.js'];
+const PROTECTED = ['backend.json', 'index.html', 'README.md', 'worker.js', 'og.png'];
 const MAX_BYTES = 20 * 1024 * 1024;
 const ALLOW_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico', 'tif', 'tiff', 'heic', 'apng', 'jfif'];
 
