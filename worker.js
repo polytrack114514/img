@@ -69,6 +69,19 @@ const safeName = (raw) =>
 /** 访问令牌存在 KV 里：key 为 t:令牌，value 为 { name, createdAt } */
 const TOKEN_PREFIX = 't:';
 
+/** 短链：s:短码 -> 文件名，sr:文件名 -> 短码 */
+const SHORT_PREFIX = 's:';
+const SHORT_REV = 'sr:';
+
+const genShortCode = () => {
+  const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const b = new Uint8Array(6);
+  crypto.getRandomValues(b);
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += chars[b[i] % chars.length];
+  return s;
+};
+
 const genToken = () => {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
@@ -247,9 +260,17 @@ export default {
     try {
       // ---------- 图片直链加速：反代 GitHub raw，交给 Cloudflare 边缘缓存 ----------
       if (request.method === 'GET' && route.indexOf('/i/') === 0) {
-        let name = '';
-        try { name = decodeURIComponent(route.slice(3)); } catch (e) { name = route.slice(3); }
-        if (!name || name.indexOf('/') >= 0) return json({ error: '图片不存在' }, 404, cors);
+        let key = '';
+        try { key = decodeURIComponent(route.slice(3)); } catch (e) { key = route.slice(3); }
+        if (!key || key.indexOf('/') >= 0) return json({ error: '图片不存在' }, 404, cors);
+
+        // 没有扩展名的视为短码，去 KV 换回真实文件名
+        let name = key;
+        if (ALLOW_EXT.indexOf(extOf(name)) < 0) {
+          const mapped = env.SECRET ? await env.SECRET.get(SHORT_PREFIX + key) : null;
+          if (!mapped) return json({ error: '图片不存在' }, 404, cors);
+          name = mapped;
+        }
         if (ALLOW_EXT.indexOf(extOf(name)) < 0) return json({ error: '图片不存在' }, 404, cors);
 
         const raw = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' +
@@ -268,6 +289,39 @@ export default {
             'X-Content-Type-Options': 'nosniff',
           },
         });
+      }
+
+      // ---------- 短链：给图片生成 /i/xxxxxx 这样的短地址 ----------
+      if (request.method === 'POST' && route === '/short') {
+        if (!env.SECRET) return json({ error: '后端未绑定 KV 命名空间，短链不可用' }, 500, cors);
+        if (!(await authOk(body.password, env))) return json({ error: '口令或令牌无效' }, 403, cors);
+
+        const name = safeName(body.name);
+        if (!name) return json({ error: '缺少文件名' }, 400, cors);
+        if (isProtected(name)) return json({ error: '基础文件不能生成短链' }, 403, cors);
+
+        let code = await env.SECRET.get(SHORT_REV + name);
+        if (code) {
+          const back = await env.SECRET.get(SHORT_PREFIX + code);
+          if (back === name) return json({ ok: true, code, name, reused: true }, 200, cors);
+        }
+
+        const exists = await gh(contentsPath(name));
+        if (!exists.ok) return json({ error: '图片不存在' }, 404, cors);
+
+        code = null;
+        for (let i = 0; i < 12 && !code; i++) {
+          const candidate = genShortCode();
+          const taken = await env.SECRET.get(SHORT_PREFIX + candidate);
+          if (!taken) {
+            await env.SECRET.put(SHORT_PREFIX + candidate, name);
+            await env.SECRET.put(SHORT_REV + name, candidate);
+            code = candidate;
+          }
+        }
+        if (!code) return json({ error: '生成短码失败，请重试' }, 500, cors);
+
+        return json({ ok: true, code, name }, 201, cors);
       }
 
       // ---------- 图片列表 ----------
@@ -514,6 +568,16 @@ export default {
         if (!del.ok) return json({ error: '原图删除失败，回收站已保留副本' }, del.status, cors);
 
         await writeMeta({ [name]: null, [trashPath]: new Date().toISOString() });
+
+        // 删图时一并回收短链，避免短码指向已删除的图片
+        if (env.SECRET) {
+          const code = await env.SECRET.get(SHORT_REV + name);
+          if (code) {
+            await env.SECRET.delete(SHORT_PREFIX + code);
+            await env.SECRET.delete(SHORT_REV + name);
+          }
+        }
+
         return json({ ok: true, trashedTo: trashPath }, 200, cors);
       }
 
