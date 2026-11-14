@@ -766,56 +766,115 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   const QR_W = 1200, QR_H = 413;
   let qrBg = null;
   let qrBgState = 0;
+  let cardBgKey = '';
+  let cardBgUrl = '';
 
-  function showQr(title, sub, text) {
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('图片加载失败'));
+      im.src = url;
+    });
+  }
+
+  /** 把选中的图片取成同源 blob，避免画到 canvas 后被判定为跨域 */
+  async function itemCardBg(name) {
+    if (cardBgKey === name && cardBgUrl) return cardBgUrl;
+    const res = await fetch(imgUrl(name), { cache: 'force-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    if (cardBgUrl) URL.revokeObjectURL(cardBgUrl);
+    cardBgUrl = URL.createObjectURL(blob);
+    cardBgKey = name;
+    return cardBgUrl;
+  }
+
+  function drawCover(g, img) {
+    const s = Math.max(QR_W / img.width, QR_H / img.height);
+    const w = img.width * s, h = img.height * s;
+    g.drawImage(img, (QR_W - w) / 2, (QR_H - h) / 2, w, h);
+  }
+
+  function showQr(title, sub, text, bgUrl) {
     const canvas = $('qrCanvas');
     canvas.width = QR_W;
     canvas.height = QR_H;
     const g = canvas.getContext('2d');
 
-    const paint = () => {
+    const paint = (img) => {
+      const custom = !!img;
       g.clearRect(0, 0, QR_W, QR_H);
-      if (qrBgState === 1) g.drawImage(qrBg, 0, 0, QR_W, QR_H);
+      if (custom) drawCover(g, img);
+      else if (qrBgState === 1) g.drawImage(qrBg, 0, 0, QR_W, QR_H);
       else { g.fillStyle = '#0e0f14'; g.fillRect(0, 0, QR_W, QR_H); }
 
-      g.fillStyle = 'rgb(14,15,20)';
-      g.fillRect(70, 88, 700, 302);
+      if (custom) {
+        // 用图片做背景时压一层深色渐变，保证文字看得清
+        const grad = g.createLinearGradient(0, 0, 780, 0);
+        grad.addColorStop(0, 'rgba(8,10,14,.95)');
+        grad.addColorStop(0.6, 'rgba(8,10,14,.86)');
+        grad.addColorStop(1, 'rgba(8,10,14,.5)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 787, QR_H);
+        const foot = g.createLinearGradient(0, QR_H - 90, 0, QR_H);
+        foot.addColorStop(0, 'rgba(8,10,14,0)');
+        foot.addColorStop(1, 'rgba(8,10,14,.85)');
+        g.fillStyle = foot;
+        g.fillRect(0, QR_H - 90, 787, 90);
+      } else {
+        // 盖住背景图里原有的文字，保留左侧蓝条
+        g.fillStyle = 'rgb(14,15,20)';
+        g.fillRect(70, 88, 700, 302);
+      }
 
       g.textBaseline = 'top';
-      g.fillStyle = '#e8eaef';
+      g.fillStyle = '#ffffff';
       g.font = 'bold 74px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
       g.fillText(title, 107, 92);
       if (sub) {
-        g.fillStyle = '#8b93a3';
+        g.fillStyle = custom ? '#dfe4ec' : '#8b93a3';
         g.font = '34px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
         g.fillText(sub, 103, 164);
       }
-      g.fillStyle = '#6c7889';
+      g.fillStyle = custom ? '#e2e7ef' : '#6c7889';
       g.font = '26px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
       g.fillText('创作者：Shen Xiong  ·  polytrack114514', 94, 354);
 
+      // 右侧白底二维码
       g.fillStyle = '#ffffff';
       g.fillRect(787, 0, 413, QR_H);
 
       const qr = qrcode(0, 'M');
       qr.addData(text);
       qr.make();
-      const img = new Image();
-      img.onload = () => {
+      const img2 = new Image();
+      img2.onload = () => {
         g.imageSmoothingEnabled = false;
-        g.drawImage(img, 792, 5, 403, 403);
+        g.drawImage(img2, 792, 5, 403, 403);
         $('qrDownload').href = canvas.toDataURL('image/png');
       };
-      img.src = qr.createDataURL(8, 0);
+      img2.src = qr.createDataURL(8, 0);
     };
 
-    if (qrBgState === 0) {
+    if (bgUrl) {
+      loadImage(bgUrl).then(paint).catch(() => {
+        if (qrBgState === 0) {
+          qrBg = new Image();
+          qrBg.onload = () => { qrBgState = 1; paint(null); };
+          qrBg.onerror = () => { qrBgState = 2; paint(null); };
+          qrBg.src = 'qr-bg.jpg';
+        } else {
+          paint(null);
+        }
+      });
+    } else if (qrBgState === 0) {
       qrBg = new Image();
-      qrBg.onload = () => { qrBgState = 1; paint(); };
-      qrBg.onerror = () => { qrBgState = 2; paint(); };
+      qrBg.onload = () => { qrBgState = 1; paint(null); };
+      qrBg.onerror = () => { qrBgState = 2; paint(null); };
       qrBg.src = 'qr-bg.jpg';
     } else {
-      paint();
+      paint(null);
     }
 
     $('qrTitle').textContent = title + (sub ? ' · ' + sub : '');
@@ -1401,9 +1460,16 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     });
     $('lbCopyMd').addEventListener('click', () => lightboxName && copy('md', lightboxName));
     $('lbCopyHtml').addEventListener('click', () => lightboxName && copy('html', lightboxName));
-    $('lbQr').addEventListener('click', () => {
+    $('lbQr').addEventListener('click', async () => {
       if (!lightboxName) return;
-      showQr('图床', '', lbIsSecret ? secretShare(lightboxName) : imgUrl(lightboxName));
+      const name = lightboxName;
+      const secret = lbIsSecret;
+      const link = secret ? secretShare(name) : imgUrl(name);
+      let bg = secret ? lbBlobUrl : '';
+      if (!bg) {
+        try { bg = await itemCardBg(name); } catch (e) { bg = ''; }
+      }
+      showQr('图床', '', link, bg);
     });
     $('btnQr').addEventListener('click', () => showQr('图床', '粘贴即上传 · 直链 / 短链 / Markdown / HTML', siteBase()));
     $('qrCopy').addEventListener('click', async () => {
