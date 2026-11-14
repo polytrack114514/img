@@ -224,7 +224,7 @@
   }
   .qrbox {
     background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 14px; width: 100%; max-width: 620px; text-align: center;
+    padding: 14px; width: 100%; max-width: 720px; text-align: center;
   }
   .qrhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
   .qrbody canvas { display: block; width: 100%; height: auto; border-radius: 10px; }
@@ -763,43 +763,60 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   }
 
   // ---------- 大图 ----------
+  const QR_W = 1200, QR_H = 413;
+  let qrBg = null;
+  let qrBgState = 0;
+
   function showQr(title, sub, text) {
     const canvas = $('qrCanvas');
-    const W = 1200, H = 630;
+    canvas.width = QR_W;
+    canvas.height = QR_H;
     const g = canvas.getContext('2d');
-    g.clearRect(0, 0, W, H);
-    g.fillStyle = '#0d0f14';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#4f8cff';
-    g.fillRect(0, 0, W, 10);
-    g.fillRect(90, 150, 10, 150);
 
-    g.textBaseline = 'top';
-    g.fillStyle = '#e8eaef';
-    g.font = 'bold 64px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
-    g.fillText(title, 130, 140);
-    if (sub) {
-      g.fillStyle = '#8b93a3';
-      g.font = '28px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
-      g.fillText(sub, 136, 240);
-    }
-    g.fillStyle = '#6c7889';
-    g.font = '20px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
-    g.fillText('创作者：Shen Xiong  ·  polytrack114514', 136, 545);
+    const paint = () => {
+      g.clearRect(0, 0, QR_W, QR_H);
+      if (qrBgState === 1) g.drawImage(qrBg, 0, 0, QR_W, QR_H);
+      else { g.fillStyle = '#0e0f14'; g.fillRect(0, 0, QR_W, QR_H); }
 
-    g.fillStyle = '#ffffff';
-    g.fillRect(798, 0, 402, 630);
+      g.fillStyle = 'rgb(14,15,20)';
+      g.fillRect(70, 88, 700, 302);
 
-    const qr = qrcode(0, 'M');
-    qr.addData(text);
-    qr.make();
-    const img = new Image();
-    img.onload = () => {
-      g.imageSmoothingEnabled = false;
-      g.drawImage(img, 814, 130, 370, 370);
-      $('qrDownload').href = canvas.toDataURL('image/png');
+      g.textBaseline = 'top';
+      g.fillStyle = '#e8eaef';
+      g.font = 'bold 74px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+      g.fillText(title, 107, 92);
+      if (sub) {
+        g.fillStyle = '#8b93a3';
+        g.font = '34px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+        g.fillText(sub, 103, 164);
+      }
+      g.fillStyle = '#6c7889';
+      g.font = '26px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+      g.fillText('创作者：Shen Xiong  ·  polytrack114514', 94, 354);
+
+      g.fillStyle = '#ffffff';
+      g.fillRect(787, 0, 413, QR_H);
+
+      const qr = qrcode(0, 'M');
+      qr.addData(text);
+      qr.make();
+      const img = new Image();
+      img.onload = () => {
+        g.imageSmoothingEnabled = false;
+        g.drawImage(img, 792, 5, 403, 403);
+        $('qrDownload').href = canvas.toDataURL('image/png');
+      };
+      img.src = qr.createDataURL(8, 0);
     };
-    img.src = qr.createDataURL(8, 0);
+
+    if (qrBgState === 0) {
+      qrBg = new Image();
+      qrBg.onload = () => { qrBgState = 1; paint(); };
+      qrBg.onerror = () => { qrBgState = 2; paint(); };
+      qrBg.src = 'qr-bg.jpg';
+    } else {
+      paint();
+    }
 
     $('qrTitle').textContent = title + (sub ? ' · ' + sub : '');
     $('qrUrl').textContent = text;
