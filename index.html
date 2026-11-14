@@ -219,16 +219,17 @@
   .lb-meta { color: var(--muted); font-size: 12px; margin-right: auto; }
 
   .qrmodal {
-    position: fixed; inset: 0; background: rgba(6, 8, 12, .88);
+    position: fixed; inset: 0; background: rgba(6, 8, 12, .9);
     display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 60;
   }
   .qrbox {
     background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 16px; width: 100%; max-width: 300px; text-align: center;
+    padding: 14px; width: 100%; max-width: 620px; text-align: center;
   }
   .qrhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
-  .qrbody img { width: 220px; height: 220px; background: #fff; border-radius: 8px; padding: 8px; display: block; margin: 0 auto; }
+  .qrbody canvas { display: block; width: 100%; height: auto; border-radius: 10px; }
   .qrurl { margin-top: 10px; font-size: 12px; color: var(--muted); word-break: break-all; line-height: 1.6; }
+  .qractions { margin-top: 10px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
   .foot {
     margin-top: 26px; padding-top: 16px;
@@ -436,8 +437,12 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <span id="qrTitle">扫码打开</span>
       <button class="btn sm ghost" id="qrClose">关闭</button>
     </div>
-    <div class="qrbody" id="qrImg"></div>
+    <div class="qrbody" id="qrImg"><canvas id="qrCanvas" width="1200" height="630"></canvas></div>
     <div class="qrurl" id="qrUrl"></div>
+    <div class="qractions">
+      <a class="btn sm" id="qrDownload" href="#" download="qr-card.png">下载图片</a>
+      <button class="btn sm ghost" id="qrCopy">复制链接</button>
+    </div>
   </div>
 </div>
 
@@ -758,12 +763,45 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   }
 
   // ---------- 大图 ----------
-  function showQr(title, text) {
+  function showQr(title, sub, text) {
+    const canvas = $('qrCanvas');
+    const W = 1200, H = 630;
+    const g = canvas.getContext('2d');
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = '#0d0f14';
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = '#4f8cff';
+    g.fillRect(0, 0, W, 10);
+    g.fillRect(90, 150, 10, 150);
+
+    g.textBaseline = 'top';
+    g.fillStyle = '#e8eaef';
+    g.font = 'bold 64px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+    g.fillText(title, 130, 140);
+    if (sub) {
+      g.fillStyle = '#8b93a3';
+      g.font = '28px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+      g.fillText(sub, 136, 240);
+    }
+    g.fillStyle = '#6c7889';
+    g.font = '20px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
+    g.fillText('创作者：Shen Xiong  ·  polytrack114514', 136, 545);
+
+    g.fillStyle = '#ffffff';
+    g.fillRect(798, 0, 402, 630);
+
     const qr = qrcode(0, 'M');
     qr.addData(text);
     qr.make();
-    $('qrImg').innerHTML = qr.createImgTag(6, 2);
-    $('qrTitle').textContent = title;
+    const img = new Image();
+    img.onload = () => {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(img, 814, 130, 370, 370);
+      $('qrDownload').href = canvas.toDataURL('image/png');
+    };
+    img.src = qr.createDataURL(8, 0);
+
+    $('qrTitle').textContent = title + (sub ? ' · ' + sub : '');
     $('qrUrl').textContent = text;
     $('qrModal').hidden = false;
   }
@@ -1348,10 +1386,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     $('lbCopyHtml').addEventListener('click', () => lightboxName && copy('html', lightboxName));
     $('lbQr').addEventListener('click', () => {
       if (!lightboxName) return;
-      showQr(lbIsSecret ? '隐藏图片链接' : '图片直链',
-        lbIsSecret ? secretShare(lightboxName) : imgUrl(lightboxName));
+      showQr('图床', '', lbIsSecret ? secretShare(lightboxName) : imgUrl(lightboxName));
     });
-    $('btnQr').addEventListener('click', () => showQr('页面地址', siteBase()));
+    $('btnQr').addEventListener('click', () => showQr('图床', '粘贴即上传 · 直链 / 短链 / Markdown / HTML', siteBase()));
+    $('qrCopy').addEventListener('click', async () => {
+      const url = $('qrUrl').textContent;
+      const ok = await copyText(url);
+      toast(ok ? '已复制：' + url : '复制失败，请手动复制：' + url, ok ? 'ok' : 'err');
+    });
     $('qrClose').addEventListener('click', () => { $('qrModal').hidden = true; });
     $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) $('qrModal').hidden = true; });
   }
